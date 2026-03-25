@@ -1,0 +1,16 @@
+# ── Compiled object files ──────────────────────────────
+*.o
+
+# ── Kernel binary and ISO ──────────────────────────────
+os.bin
+dahleos.iso
+
+# ── ISO staging directory ──────────────────────────────
+iso/
+
+# ── macOS junk ─────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
