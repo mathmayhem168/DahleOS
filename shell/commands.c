@@ -231,7 +231,24 @@ static void cmd_scp(const char *args) {
    ============================================================= */
 
 /* Pixels between text lines inside a window */
-#define LINE_GAP  4u
+#define LINE_GAP      4u
+
+/* ── Dahle desktop layout ────────────────────────────────────── */
+#define SYSINFO_W    300u
+#define SYSINFO_H    148u
+#define WELCOME_W    240u
+#define WELCOME_H    110u
+#define WIN_TOP       60u
+#define WIN_GAP       10u     /* horizontal gap between the two windows    */
+
+/* Centre the two-window group on the 800-px screen */
+#define SYSINFO_X  ((800u - SYSINFO_W - WIN_GAP - WELCOME_W) / 2u)  /* = 125 */
+#define WELCOME_X  (SYSINFO_X + SYSINFO_W + WIN_GAP)                /* = 435 */
+
+/* Elements below the windows */
+#define CLOSE_BTN_H   26u
+#define CLOSE_BTN_Y  (WIN_TOP + WELCOME_H + 10u)                    /* = 180 */
+#define HINT_Y       (CLOSE_BTN_Y + CLOSE_BTN_H + 12u)             /* = 218 */
 
 /* ── Scene helpers ──────────────────────────────────────────── */
 
@@ -239,7 +256,7 @@ static void cmd_scp(const char *args) {
    Call this first; everything else goes on top. */
 static void dahle_draw_desktop(void) {
     gui_desktop();
-    gui_statusbar("DahleOS  v1.0.0", "dahle  |  Press ESC to exit");
+    gui_statusbar(OS_NAME "  v" OS_VERSION, "dahle  |  Press any key to exit");
 }
 
 /* ── Window content helpers ─────────────────────────────────── */
@@ -271,9 +288,8 @@ static void dahle_wkv(uint32_t wx, uint32_t wy,
 
 /* System information window */
 static void dahle_sysinfo_window(uint32_t x, uint32_t y) {
-    const uint32_t W = 300, H = 148;
-    gui_window(x, y, W, H, "System Information");
-    dahle_wkv(x, y, 0, "OS:     ", "DahleOS v1.0.0");
+    gui_window(x, y, SYSINFO_W, SYSINFO_H, "System Information");
+    dahle_wkv(x, y, 0, "OS:     ", OS_NAME " v" OS_VERSION);
     dahle_wkv(x, y, 1, "Arch:   ", "x86  32-bit Protected Mode");
     dahle_wkv(x, y, 2, "Video:  ", "800x600x32  VESA");
     dahle_wkv(x, y, 3, "Timer:  ", "PIT  100 Hz");
@@ -282,13 +298,12 @@ static void dahle_sysinfo_window(uint32_t x, uint32_t y) {
 
 /* A small welcome / about window */
 static void dahle_welcome_window(uint32_t x, uint32_t y) {
-    const uint32_t W = 240, H = 110;
-    gui_window(x, y, W, H, "Welcome");
+    gui_window(x, y, WELCOME_W, WELCOME_H, "Welcome");
     dahle_wtext(x, y, 0, "DahleOS Graphical Shell", GC_TEXT);
     dahle_wtext(x, y, 1, "Powered by VESA framebuffer", GC_TEXT_DIM);
     gui_separator(x + GUI_PAD, y + GUI_TITLE_H + 2 + 2 * (screen_char_h() + LINE_GAP),
-                  W - 2 * GUI_PAD);
-    dahle_wtext(x, y, 3, "Type  dahle  to re-open.", GC_TEXT_DIM);
+                  WELCOME_W - 2 * GUI_PAD);
+    dahle_wtext(x, y, 3, "Type 'dahle' to re-open.", GC_TEXT_DIM);
 }
 
 /* ── Desktop command ──────────────────────────────────────────
@@ -310,15 +325,16 @@ static void cmd_dahle(const char *args) {
 
     /* ── Scene ── */
     dahle_draw_desktop();
-    dahle_sysinfo_window(50, 60);
-    dahle_welcome_window(390, 60);
+    dahle_sysinfo_window(SYSINFO_X, WIN_TOP);
+    dahle_welcome_window(WELCOME_X, WIN_TOP);
 
-    /* Close button aligned with the welcome window's right edge */
-    gui_button(390, 200, 240, 26, "Close  (any key)");
+    /* Close button below the welcome window */
+    gui_button(WELCOME_X, CLOSE_BTN_Y, WELCOME_W, CLOSE_BTN_H, "Close (any key)");
 
-    /* Dim hint at the bottom */
-    gui_label(50, 210, "Press any key to return to the shell.",
-              GC_TEXT_DIM, TRANSPARENT);
+    /* Hint centred across the full screen width */
+    gui_label_centered(0, HINT_Y, 800u,
+                       "Press any key to return to the shell.",
+                       GC_TEXT_DIM, TRANSPARENT);
 
     /* ── Wait ── */
     keyboard_getchar();
@@ -326,7 +342,7 @@ static void cmd_dahle(const char *args) {
     /* ── Restore shell ── */
     screen_set_color(WHITE, GUI_DESKTOP);
     screen_clear();
-    kprint_color("\n  DahleOS  v1.0.0\n", LGREEN, GUI_DESKTOP);
+    kprint_color("\n  " OS_NAME "  v" OS_VERSION "\n", LGREEN, GUI_DESKTOP);
     kprint_color("  ----------------\n\n", GUI_BORDER, GUI_DESKTOP);
     kprint_color("  All systems nominal.\n\n", GREEN, GUI_DESKTOP);
 }
