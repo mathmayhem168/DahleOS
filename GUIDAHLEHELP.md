@@ -19,6 +19,8 @@ Key facts to burn into memory now:
 | Input is **keyboard only** — no mouse | Buttons are visual only; you choose them with keys |
 | `keyboard_getchar()` **blocks** until a key arrives | Your screen freezes while waiting |
 | `keyboard_poll()` returns 1 immediately if a key is ready | Use this for animation / live menus |
+| `keyboard_shift_held()` returns 1 while Shift is physically held | Call it right after `getchar` to detect Shift+key chords |
+| Arrow keys return `KEY_UP/DOWN/LEFT/RIGHT` (`\x11`–`\x14`) | Extended PS/2 scancodes are now mapped automatically |
 | **Nothing erases itself** — redraw over it to erase | Paint the background colour on top |
 | Character cells are **8 px wide, 16 px tall** | `screen_char_w()` = 8, `screen_char_h()` = 16 |
 
@@ -38,6 +40,7 @@ Key facts to burn into memory now:
 10. [macOS-style Window Buttons](#lesson-10-macos-style-window-buttons)
 11. [Multi-window Desktops](#lesson-11-multi-window-desktops)
 12. [Advanced Patterns and Full Example](#lesson-12-advanced-patterns-and-full-example)
+13. [The Dahle Window Manager — the real desktop](#lesson-13-the-dahle-window-manager--the-real-desktop)
 
 ---
 
@@ -213,15 +216,15 @@ LBLUE    LGREEN   LCYAN    LRED    LMAGENTA  LBROWN
 GC_DESKTOP_TOP   /* dark navy — top of the desktop gradient     */
 GC_DESKTOP_BOT   /* near-black — bottom of desktop gradient     */
 GC_WIN_BG        /* window body background                      */
-GC_WIN_TITLE     /* title bar blue                              */
+GC_WIN_TITLE     /* title bar teal  RGB(0,120,140)              */
 GC_WIN_BORDER    /* window / panel border                       */
 GC_BTN           /* button background                           */
-GC_BTN_BORDER    /* button border (bright accent blue)          */
+GC_BTN_BORDER    /* button border (cyan)  RGB(0,180,180)        */
 GC_TEXT          /* primary text (near-white)                   */
 GC_TEXT_DIM      /* dim text (grey)                             */
 GC_SEP           /* separator line colour                       */
 GC_STATUSBAR     /* status bar background                       */
-GC_ACCENT        /* accent blue (same as button border)         */
+GC_ACCENT        /* accent cyan  RGB(0,180,180)                 */
 GC_DANGER        /* red — errors, warnings, destructive actions */
 GC_SUCCESS       /* green — OK, confirmed, success              */
 GC_WARN          /* yellow — caution / warning                  */
@@ -575,10 +578,15 @@ while (1) {
 | `a`–`z` | `'a'`–`'z'` | `c == 'a'` etc. |
 | `A`–`Z` | `'A'`–`'Z'` (requires Shift held) | `c == 'A'` etc. |
 | `0`–`9` | `'0'`–`'9'` | `c == '0'` etc. |
+| Arrow Up | `KEY_UP` (`'\x11'`) | `c == KEY_UP` |
+| Arrow Down | `KEY_DOWN` (`'\x12'`) | `c == KEY_DOWN` |
+| Arrow Left | `KEY_LEFT` (`'\x13'`) | `c == KEY_LEFT` |
+| Arrow Right | `KEY_RIGHT` (`'\x14'`) | `c == KEY_RIGHT` |
+
+`KEY_UP/DOWN/LEFT/RIGHT` are defined in `drivers/keyboard.h` — include that header.
 
 > ⚠️ **The Ctrl key is NOT tracked by the current keyboard driver.**
-> Arrow keys, F-keys, and Home/End also return 0 (discarded by the driver) — do not
-> try to use them.  Use letter/number keys for your shortcuts instead.
+> F-keys and Home/End are also discarded — use letter/number keys for those shortcuts.
 
 ---
 
@@ -608,12 +616,43 @@ done:
 
 ### Shift is available — double your shortcuts
 
-The keyboard driver tracks Shift.  Lowercase `w` and uppercase `W` are different:
+The keyboard driver tracks Shift in two complementary ways:
+
+**1. Letter case** — lowercase `w` and uppercase `W` are different characters:
 
 ```c
-case 'w': /* close window    */  break;
+case 'w': /* close window     */  break;
 case 'W': /* close ALL windows */ break;   /* Shift+W */
 ```
+
+**2. `keyboard_shift_held()` — for chords like Shift+ESC**
+
+ESC and arrow keys produce the same character regardless of Shift, so you must call
+`keyboard_shift_held()` immediately after `keyboard_getchar()` to detect those chords:
+
+```c
+while (1) {
+    char c = keyboard_getchar();
+
+    if (c == '\x1B') {
+        if (keyboard_shift_held()) {
+            open_launcher();   /* Shift+ESC */
+        } else {
+            break;             /* bare ESC — exit */
+        }
+        continue;
+    }
+
+    if (c == KEY_UP && keyboard_shift_held()) {
+        move_fast_up();    /* Shift+Up — bigger jump */
+    } else if (c == KEY_UP) {
+        move_one_step();   /* bare Up */
+    }
+}
+```
+
+> **Timing:** `keyboard_shift_held()` reads the Shift state at the instant you call it.
+> Always call it immediately after `keyboard_getchar()`, before any other input call.
 
 ### "Modifier" simulation with a prefix key
 
@@ -958,28 +997,43 @@ case '\t':
     break;
 ```
 
-### Pattern — moving a window with WASD
+### Pattern — moving a window with arrow keys (preferred) or WASD
+
+Arrow keys now return `KEY_UP / KEY_DOWN / KEY_LEFT / KEY_RIGHT` from `keyboard.h`.
+Use them for window movement; they feel natural and don't conflict with typing:
 
 ```c
-#define MOVE_STEP 10u   /* pixels per keypress */
+#include "../drivers/keyboard.h"   /* KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT */
+
+#define MOVE_STEP 8u   /* pixels per keypress */
 
 while (1) {
     char c = keyboard_getchar();
     int moved = 1;
-    if      (c == 'a' && win_x > MOVE_STEP)                   win_x -= MOVE_STEP;
-    else if (c == 'd' && win_x + win_w + MOVE_STEP < screen_px_w()) win_x += MOVE_STEP;
-    else if (c == 'w' && win_y > MOVE_STEP)                   win_y -= MOVE_STEP;
-    else if (c == 's' && win_y + win_h + MOVE_STEP < screen_px_h()) win_y += MOVE_STEP;
+
+    if      (c == KEY_UP    && win_y >= MOVE_STEP + 2u) win_y -= MOVE_STEP;
+    else if (c == KEY_DOWN  && win_y + MOVE_STEP < 560u) win_y += MOVE_STEP;
+    else if (c == KEY_LEFT  && win_x >= MOVE_STEP + 2u) win_x -= MOVE_STEP;
+    else if (c == KEY_RIGHT && win_x + MOVE_STEP < 798u) win_x += MOVE_STEP;
     else if (c == '\x1B') break;
     else moved = 0;
 
     if (moved) {
-        gui_desktop();                               /* clear background */
+        gui_desktop();
         gui_window(win_x, win_y, win_w, win_h, "Moving Window");
-        draw_traffic_lights(win_x, win_y);
-        gui_statusbar("Move Mode", "WASD=Move  ESC=Exit");
+        gui_statusbar("Move Mode", "Arrows=Move  ESC=Exit");
     }
 }
+```
+
+You can also use WASD if you prefer letter keys (useful when arrows are reserved for
+something else in the same loop):
+
+```c
+if      (c == 'a' && win_x > MOVE_STEP) win_x -= MOVE_STEP;
+else if (c == 'd' && win_x + win_w + MOVE_STEP < screen_px_w()) win_x += MOVE_STEP;
+else if (c == 'w' && win_y > MOVE_STEP) win_y -= MOVE_STEP;
+else if (c == 's' && win_y + win_h + MOVE_STEP < screen_px_h()) win_y += MOVE_STEP;
 ```
 
 ---
@@ -1173,6 +1227,181 @@ static void cmd_gui2(const char *args) {
 
 ---
 
+## Lesson 13: The Dahle Window Manager — the real desktop
+
+This lesson documents the actual `dahle` command as it exists in `shell/commands.c`.
+It is the reference implementation for every pattern taught above.
+
+### Overview
+
+`dahle` paints three movable windows on a teal-accented desktop.  The focused window
+receives a teal glow border.  An App Launcher opens over a dark modal scrim.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Desktop  (gui_desktop gradient + gui_statusbar)                             │
+│                                                                              │
+│  ┌──────────────────────┐  ┌────────────────────┐  ┌─────────────────┐      │
+│  │ System Information   │  │ Welcome            │  │ Controls        │      │
+│  │ OS:     DahleOS …    │  │ DahleOS GUI Shell  │  │ Tab    focus    │      │
+│  │ Arch:   x86 32-bit   │  │ Powered by VESA…   │  │ Arrows  move   │      │
+│  │ Video:  800x600x32   │  │ ─────────────────  │  │ ESC     exit   │      │
+│  │ Timer:  PIT 100 Hz   │  │ v1.0.0  x86 PM     │  │ S+ESC   apps  │      │
+│  │ Shell:  interactive  │  └────────────────────┘  └─────────────────┘      │
+│  │ Uptime: 42 s         │                                                    │
+│  │ [ONLINE]             │                                                    │
+│  └──────────────────────┘                                                    │
+│                                                                              │
+│       Tab  next window  |  Arrows  move  |  ESC  exit  |  Shift+ESC  apps   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  DahleOS  v1.0.0                               Tab  Arrows  ESC  S+ESC      │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Window layout constants
+
+```c
+/* Three windows, centred on the 800-px screen:
+ *   SYSINFO  300 px  |  gap 20  |  WELCOME  240 px  |  gap 20  |  CONTROLS  160 px
+ *   Total = 740 px   →   left margin = (800-740)/2 = 30 px                        */
+#define SYSINFO_W    300u    /* System Information window width  */
+#define SYSINFO_H    185u    /* System Information window height */
+#define WELCOME_W    240u    /* Welcome window width             */
+#define WELCOME_H    135u    /* Welcome window height            */
+#define CONTROLS_W   160u    /* Controls reference window width  */
+#define CONTROLS_H   135u    /* Controls reference window height */
+#define WIN_TOP       70u    /* Y of all three windows           */
+#define WIN_GAP       20u    /* horizontal gap between windows   */
+#define SYSINFO_X     30u
+#define WELCOME_X    350u
+#define CONTROLS_X   610u
+#define MOVE_STEP      8u    /* pixels moved per arrow keypress  */
+#define HINT_Y       544u    /* Y of the bottom hint label       */
+```
+
+### Mutable state (file-scope statics)
+
+```c
+static uint32_t wpos_x[3], wpos_y[3];  /* current position of each window */
+static int      wfocus;                 /* index 0-2 of the focused window  */
+```
+
+### Focus glow
+
+The focused window gets a 2 px teal (`GC_ACCENT`) rounded-rect border drawn
+**before** `gui_window`, so the window itself renders on top of the glow:
+
+```c
+static void dahle_focus_glow(uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
+    if (x < 2u || y < 2u) return;   /* guard against uint32_t underflow   */
+    screen_fill_rounded_rect(x - 2u, y - 2u, w + 4u, h + 4u, 8u, GC_ACCENT);
+}
+
+/* Inside each window draw function: */
+static void dahle_sysinfo_window(uint32_t x, uint32_t y, int focused) {
+    if (focused) dahle_focus_glow(x, y, SYSINFO_W, SYSINFO_H);
+    gui_window(x, y, SYSINFO_W, SYSINFO_H, "System Information");
+    /* ... content ... */
+}
+```
+
+### Full desktop redraw
+
+Every input event triggers a full repaint.  This is cheap (< 1 ms) and keeps the
+code simple — no dirty-rectangle tracking needed.
+
+```c
+static void dahle_redraw(void) {
+    dahle_draw_desktop();
+    dahle_sysinfo_window (wpos_x[0], wpos_y[0], wfocus == 0);
+    dahle_welcome_window (wpos_x[1], wpos_y[1], wfocus == 1);
+    dahle_controls_window(wpos_x[2], wpos_y[2], wfocus == 2);
+    gui_label_centered(0u, HINT_Y, 800u,
+        "Tab  next window  |  Arrows  move  |  ESC  exit  |  Shift+ESC  apps",
+        GC_TEXT_DIM, TRANSPARENT);
+}
+```
+
+### Event loop
+
+```c
+char c;
+while (1) {
+    c = keyboard_getchar();
+
+    if (c == '\x1b') {
+        if (keyboard_shift_held()) {   /* Shift+ESC → launcher */
+            dahle_launcher();
+            dahle_redraw();
+            continue;
+        }
+        break;                         /* bare ESC → exit      */
+    }
+
+    if      (c == '\t')    { wfocus = (wfocus + 1) % 3; }
+    else if (c == KEY_UP   && wpos_y[wfocus] >= MOVE_STEP + 2u) wpos_y[wfocus] -= MOVE_STEP;
+    else if (c == KEY_DOWN && wpos_y[wfocus] + MOVE_STEP < 560u) wpos_y[wfocus] += MOVE_STEP;
+    else if (c == KEY_LEFT && wpos_x[wfocus] >= MOVE_STEP + 2u) wpos_x[wfocus] -= MOVE_STEP;
+    else if (c == KEY_RIGHT&& wpos_x[wfocus] + MOVE_STEP < 798u) wpos_x[wfocus] += MOVE_STEP;
+
+    dahle_redraw();
+}
+```
+
+### Modal scrim + App Launcher
+
+Apps dim the screen with a solid dark rect (no alpha blending), then draw a centred
+window on top.  This creates the "lights dim" modal effect:
+
+```c
+static void dahle_modal_scrim(void) {
+    screen_fill_rect(0u, 0u, 800u, 580u, RGB(6, 9, 14));
+}
+
+static void dahle_launcher(void) {
+    const uint32_t LW = 280u, LH = 155u;
+    const uint32_t LX = (800u - LW) / 2u;
+    const uint32_t LY = (600u - LH) / 2u;
+
+    dahle_modal_scrim();
+    gui_window(LX, LY, LW, LH, "App Launcher");
+    dahle_wtext(LX, LY, 0, "[1]  System Monitor",  GC_TEXT);
+    dahle_wtext(LX, LY, 1, "[2]  About DahleOS",   GC_TEXT);
+    gui_separator(LX + GUI_PAD,
+                  LY + GUI_TITLE_H + 2u + 2u * (screen_char_h() + LINE_GAP),
+                  LW - 2u * GUI_PAD);
+    dahle_wtext(LX, LY, 3, "[ESC]  Close",         GC_TEXT_DIM);
+
+    char c = keyboard_getchar();
+    if      (c == '1') dahle_app_sysmon();
+    else if (c == '2') dahle_app_about();
+}
+```
+
+### Adding a 4th window
+
+1. Write `dahle_mywindow(uint32_t x, uint32_t y, int focused)` following the pattern
+   of `dahle_controls_window`.
+2. Extend `wpos_x` and `wpos_y` to `[4]` and add `wpos_x[3] = MY_X; wpos_y[3] = MY_Y;`
+   in the initialisation block of `cmd_dahle`.
+3. Add `dahle_mywindow(wpos_x[3], wpos_y[3], wfocus == 3);` to `dahle_redraw()`.
+4. Change `wfocus = (wfocus + 1) % 3` → `% 4` in the event loop.
+5. Run `make`.
+
+### Live uptime inside a window
+
+Read `timer_ticks()` at draw time — it refreshes automatically each keypress:
+
+```c
+char ubuf[12], ustr[20] = {0};
+int_to_str((int)(timer_ticks() / 100u), ubuf);   /* ticks ÷ 100 = seconds */
+strcat(ustr, ubuf);
+strcat(ustr, " s");
+dahle_wkv(x, y, 5, "Uptime: ", ustr);
+```
+
+---
+
 ## Quick Reference Card
 
 ### Content Y formula (the one formula you use constantly)
@@ -1181,6 +1410,31 @@ static void cmd_gui2(const char *args) {
 content_line_y(win_y, line) = win_y + GUI_TITLE_H + 2 + line * (16 + LINE_GAP)
 ```
 where `LINE_GAP` is your own `#define` (typically 4).
+
+### Input cheat sheet
+
+```c
+/* Blocking read — use in event loops */
+char c = keyboard_getchar();
+
+/* Non-blocking — use for animation */
+if (keyboard_poll()) { char c = keyboard_getchar(); /* ... */ }
+
+/* Shift held right now (call immediately after getchar) */
+int shifted = keyboard_shift_held();
+
+/* Arrow key checks */
+if (c == KEY_UP)    { /* move up    */ }
+if (c == KEY_DOWN)  { /* move down  */ }
+if (c == KEY_LEFT)  { /* move left  */ }
+if (c == KEY_RIGHT) { /* move right */ }
+
+/* Shift+ESC chord */
+if (c == '\x1b' && keyboard_shift_held()) { /* launcher */ }
+
+/* Plain ESC */
+if (c == '\x1b' && !keyboard_shift_held()) { /* exit */ }
+```
 
 ### Shapes cheat sheet
 
@@ -1239,17 +1493,21 @@ screen_clear();
 
 ---
 
-## Summary of things NOT available (important to remember)
+## Summary of what is and isn't available
 
 | Feature | Status |
 |---|---|
 | Mouse / pointer input | ❌ Not implemented |
-| Text input fields | ❌ Not implemented — `keyboard_getchar` returns one char at a time; you must build your own buffer |
-| Ctrl+key shortcuts | ❌ Ctrl is not tracked by the keyboard driver |
-| Arrow / F-keys | ❌ Not mapped in the scancode table |
-| Alpha transparency | ❌ No blending — `TRANSPARENT` only skips background pixels, it does not blend |
+| Text input fields | ❌ Not built-in — `keyboard_getchar` returns one char at a time; build your own buffer |
+| Ctrl+key shortcuts | ❌ Ctrl state is not tracked by the keyboard driver |
+| Arrow keys | ✅ Supported — return `KEY_UP/DOWN/LEFT/RIGHT` (`'\x11'`–`'\x14'`) |
+| Shift key (held state) | ✅ Supported — `keyboard_shift_held()` returns 1 while Shift is physically held |
+| F-keys, Home, End | ❌ Extended scancodes not mapped for those keys |
+| Alpha transparency | ❌ No blending — `TRANSPARENT` skips background pixels only; it does not blend |
 | Automatic redraws | ❌ You must call drawing functions manually |
-| Widget callbacks | ❌ No callback system — handle input in your own loop |
+| Widget callbacks | ❌ No callback system — handle input in your own event loop |
+| Window focus / glow | ✅ Supported via `dahle_focus_glow()` pattern (see Lesson 13) |
+| App launcher / modal | ✅ Supported via `dahle_modal_scrim()` + overlay window pattern |
 
 ---
 
