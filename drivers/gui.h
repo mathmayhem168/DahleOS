@@ -18,15 +18,15 @@
 #define GC_DESKTOP_TOP  RGB(18,  26,  48)   /* desktop gradient – top    */
 #define GC_DESKTOP_BOT  RGB(10,  14,  22)   /* desktop gradient – bottom */
 #define GC_WIN_BG       RGB(22,  27,  34)   /* window body               */
-#define GC_WIN_TITLE    RGB(31, 111, 235)   /* title bar (accent blue)   */
+#define GC_WIN_TITLE    RGB(0,  120, 140)   /* title bar (teal)          */
 #define GC_WIN_BORDER   RGB(48,  54,  61)   /* window / panel border     */
 #define GC_BTN          RGB(33,  39,  46)   /* button background         */
-#define GC_BTN_BORDER   RGB(56, 139, 253)   /* button border             */
+#define GC_BTN_BORDER   RGB(0,  180, 180)   /* button border (cyan)      */
 #define GC_TEXT         RGB(240, 246, 252)  /* primary text              */
 #define GC_TEXT_DIM     RGB(139, 148, 158)  /* secondary / dim text      */
 #define GC_SEP          RGB(48,  54,  61)   /* separator line            */
 #define GC_STATUSBAR    RGB(13,  17,  23)   /* status bar background     */
-#define GC_ACCENT       RGB(56, 139, 253)   /* accent blue               */
+#define GC_ACCENT       RGB(0,  180, 180)   /* accent cyan               */
 #define GC_DANGER       RGB(248,  81,  73)  /* red – errors / warnings   */
 #define GC_SUCCESS      RGB( 63, 185,  80)  /* green – ok / success      */
 #define GC_WARN         RGB(227, 179,  65)  /* yellow – warnings         */

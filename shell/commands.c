@@ -219,8 +219,13 @@ static void cmd_scp(const char *args) {
 /* =============================================================
    GUI — Desktop helpers and the `dahle` command
    =============================================================
-   These helpers are the building blocks for the Dahle GUI.
-   They operate entirely through gui.h — no raw pixels needed.
+   Three-window desktop with keyboard-driven window management.
+
+   Controls:
+     Tab         → cycle window focus
+     Arrow keys  → move focused window
+     ESC         → exit to shell
+     Shift+ESC   → open App Launcher
 
    Window content coordinate helper
    ---------------------------------
@@ -230,116 +235,272 @@ static void cmd_scp(const char *args) {
    Use dahle_wtext() / dahle_wkv() instead of computing this manually.
    ============================================================= */
 
-/* Pixels between text lines inside a window */
 #define LINE_GAP      4u
 
-/* ── Dahle desktop layout ────────────────────────────────────── */
+/* ── Desktop layout (three windows, centred on 800-px screen) ── */
 #define SYSINFO_W    300u
-#define SYSINFO_H    148u
+#define SYSINFO_H    185u
 #define WELCOME_W    240u
-#define WELCOME_H    110u
-#define WIN_TOP       60u
-#define WIN_GAP       10u     /* horizontal gap between the two windows    */
+#define WELCOME_H    135u
+#define CONTROLS_W   160u
+#define CONTROLS_H   135u
+#define WIN_TOP       70u
+#define WIN_GAP       20u
 
-/* Centre the two-window group on the 800-px screen */
-#define SYSINFO_X  ((800u - SYSINFO_W - WIN_GAP - WELCOME_W) / 2u)  /* = 125 */
-#define WELCOME_X  (SYSINFO_X + SYSINFO_W + WIN_GAP)                /* = 435 */
+/*  Total content = 300+240+160 = 700,  gaps = 40,  sum = 740
+ *  SYSINFO_X  = (800-740)/2 = 30
+ *  WELCOME_X  = 30+300+20   = 350
+ *  CONTROLS_X = 350+240+20  = 610                              */
+#define SYSINFO_X    30u
+#define WELCOME_X    350u
+#define CONTROLS_X   610u
 
-/* Elements below the windows */
-#define CLOSE_BTN_H   26u
-#define CLOSE_BTN_Y  (WIN_TOP + WELCOME_H + 10u)                    /* = 180 */
-#define HINT_Y       (CLOSE_BTN_Y + CLOSE_BTN_H + 12u)             /* = 218 */
+/* Hint bar: centred at the very bottom, just above the status bar */
+#define HINT_Y       544u
+
+/* Window-movement step (pixels per arrow-key press) */
+#define MOVE_STEP    8u
+
+/* ── Mutable window positions and focus ─────────────────────── */
+static uint32_t wpos_x[3], wpos_y[3];
+static int      wfocus;  /* index of the focused window (0-2) */
 
 /* ── Scene helpers ──────────────────────────────────────────── */
 
-/* Draw the full desktop: vertical gradient + status bar.
-   Call this first; everything else goes on top. */
 static void dahle_draw_desktop(void) {
     gui_desktop();
-    gui_statusbar(OS_NAME "  v" OS_VERSION, "dahle  |  Press any key to exit");
+    gui_statusbar(OS_NAME "  v" OS_VERSION,
+                  "Tab  Arrows  ESC  S+ESC");
 }
 
 /* ── Window content helpers ─────────────────────────────────── */
 
-/* Print a line of text inside a window.
-   `wx`, `wy`    – top-left corner of the window (same values passed to gui_window).
-   `line`        – 0-based line index inside the content area.
-   `text`        – the string to draw.
-   `color`       – foreground colour (e.g. GC_TEXT or GC_TEXT_DIM). */
+/* Draw a line of text inside a window at a logical line index. */
 static void dahle_wtext(uint32_t wx, uint32_t wy,
                          uint32_t line, const char *text, uint32_t color) {
     uint32_t x = wx + GUI_PAD;
-    uint32_t y = wy + GUI_TITLE_H + 2 + line * (screen_char_h() + LINE_GAP);
+    uint32_t y = wy + GUI_TITLE_H + 2u + line * (screen_char_h() + LINE_GAP);
     screen_draw_str_px(x, y, text, color, GC_WIN_BG);
 }
 
-/* Draw a key / value pair on the same line inside a window.
-   The key is drawn in dim text; the value follows after a fixed offset. */
+/* Draw a dim key and a bright value on the same line, aligned to a fixed column. */
 static void dahle_wkv(uint32_t wx, uint32_t wy,
                        uint32_t line, const char *key, const char *val) {
     dahle_wtext(wx, wy, line, key, GC_TEXT_DIM);
-    /* Value starts after a fixed column so entries align vertically */
     uint32_t val_x = wx + GUI_PAD + 9u * screen_char_w();
-    uint32_t val_y = wy + GUI_TITLE_H + 2 + line * (screen_char_h() + LINE_GAP);
+    uint32_t val_y = wy + GUI_TITLE_H + 2u + line * (screen_char_h() + LINE_GAP);
     screen_draw_str_px(val_x, val_y, val, GC_TEXT, GC_WIN_BG);
+}
+
+/* Draw a teal focus-glow border 2 px outside a window's bounding box. */
+static void dahle_focus_glow(uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
+    if (x < 2u || y < 2u) return;
+    screen_fill_rounded_rect(x - 2u, y - 2u, w + 4u, h + 4u, 8u, GC_ACCENT);
 }
 
 /* ── Pre-built windows ──────────────────────────────────────── */
 
-/* System information window */
-static void dahle_sysinfo_window(uint32_t x, uint32_t y) {
+/* System information — shows live uptime and an ONLINE status badge. */
+static void dahle_sysinfo_window(uint32_t x, uint32_t y, int focused) {
+    if (focused) dahle_focus_glow(x, y, SYSINFO_W, SYSINFO_H);
     gui_window(x, y, SYSINFO_W, SYSINFO_H, "System Information");
     dahle_wkv(x, y, 0, "OS:     ", OS_NAME " v" OS_VERSION);
     dahle_wkv(x, y, 1, "Arch:   ", "x86  32-bit Protected Mode");
     dahle_wkv(x, y, 2, "Video:  ", "800x600x32  VESA");
     dahle_wkv(x, y, 3, "Timer:  ", "PIT  100 Hz");
     dahle_wkv(x, y, 4, "Shell:  ", "DahleOS interactive shell");
+
+    /* Live uptime — refreshes on every redraw (each keypress) */
+    char ubuf[12], ustr[20] = {0};
+    int_to_str((int)(timer_ticks() / 100u), ubuf);
+    strcat(ustr, ubuf);
+    strcat(ustr, " s");
+    dahle_wkv(x, y, 5, "Uptime: ", ustr);
+
+    /* Status badge — one visual row below the last kv pair */
+    uint32_t badge_y = y + GUI_TITLE_H + 2u + 6u * (screen_char_h() + LINE_GAP);
+    gui_badge(x + GUI_PAD, badge_y, "ONLINE", GC_WIN_BG, GC_SUCCESS);
 }
 
-/* A small welcome / about window */
-static void dahle_welcome_window(uint32_t x, uint32_t y) {
+/* Welcome / about window. */
+static void dahle_welcome_window(uint32_t x, uint32_t y, int focused) {
+    if (focused) dahle_focus_glow(x, y, WELCOME_W, WELCOME_H);
     gui_window(x, y, WELCOME_W, WELCOME_H, "Welcome");
     dahle_wtext(x, y, 0, "DahleOS Graphical Shell", GC_TEXT);
     dahle_wtext(x, y, 1, "Powered by VESA framebuffer", GC_TEXT_DIM);
-    gui_separator(x + GUI_PAD, y + GUI_TITLE_H + 2 + 2 * (screen_char_h() + LINE_GAP),
-                  WELCOME_W - 2 * GUI_PAD);
-    dahle_wtext(x, y, 3, "Type 'dahle' to re-open.", GC_TEXT_DIM);
+    gui_separator(x + GUI_PAD,
+                  y + GUI_TITLE_H + 2u + 2u * (screen_char_h() + LINE_GAP),
+                  WELCOME_W - 2u * GUI_PAD);
+    dahle_wtext(x, y, 3, "v" OS_VERSION "  x86 Protected Mode", GC_TEXT_DIM);
+}
+
+/* Controls reference — keyboard shortcuts for the window manager. */
+static void dahle_controls_window(uint32_t x, uint32_t y, int focused) {
+    if (focused) dahle_focus_glow(x, y, CONTROLS_W, CONTROLS_H);
+    gui_window(x, y, CONTROLS_W, CONTROLS_H, "Controls");
+    dahle_wtext(x, y, 0, "Tab    focus", GC_TEXT);
+    dahle_wtext(x, y, 1, "Arrows  move", GC_TEXT);
+    dahle_wtext(x, y, 2, "ESC     exit", GC_TEXT);
+    dahle_wtext(x, y, 3, "S+ESC   apps", GC_TEXT);
+}
+
+/* ── Full desktop redraw ──────────────────────────────────────
+   Repaints the entire scene from scratch.  Called after every
+   input event so the display always reflects current state.   */
+static void dahle_redraw(void) {
+    dahle_draw_desktop();
+    dahle_sysinfo_window (wpos_x[0], wpos_y[0], wfocus == 0);
+    dahle_welcome_window (wpos_x[1], wpos_y[1], wfocus == 1);
+    dahle_controls_window(wpos_x[2], wpos_y[2], wfocus == 2);
+    gui_label_centered(0u, HINT_Y, 800u,
+        "Tab  next window  |  Arrows  move  |  ESC  exit  |  Shift+ESC  apps",
+        GC_TEXT_DIM, TRANSPARENT);
+}
+
+/* ── App helpers ──────────────────────────────────────────────
+   Apps render a centred modal over a dark scrim, then block
+   on keyboard_getchar() until the user dismisses them.        */
+
+static void dahle_modal_scrim(void) {
+    screen_fill_rect(0u, 0u, 800u, 580u, RGB(6, 9, 14));
+}
+
+/* App: System Monitor */
+static void dahle_app_sysmon(void) {
+    const uint32_t AW = 380u, AH = 220u;
+    const uint32_t AX = (800u - AW) / 2u;
+    const uint32_t AY = (600u - AH) / 2u;
+
+    dahle_modal_scrim();
+    gui_window(AX, AY, AW, AH, "System Monitor");
+
+    dahle_wkv(AX, AY, 0, "OS:      ", OS_NAME " v" OS_VERSION);
+    dahle_wkv(AX, AY, 1, "Arch:    ", "x86  32-bit Protected Mode");
+    dahle_wkv(AX, AY, 2, "Video:   ", "800x600x32  VESA framebuffer");
+    dahle_wkv(AX, AY, 3, "Timer:   ", "PIT  100 Hz");
+
+    uint32_t ticks = timer_ticks();
+    uint32_t secs  = ticks / 100u;
+    uint32_t mins  = secs  / 60u;
+    uint32_t hrs   = mins  / 60u;
+
+    char hs[8], ms[8], ss[8], ts[12];
+    int_to_str((int)hrs,       hs);
+    int_to_str((int)(mins%60), ms);
+    int_to_str((int)(secs%60), ss);
+    int_to_str((int)ticks,     ts);
+
+    char upstr[32] = {0};
+    strcat(upstr, hs); strcat(upstr, "h  ");
+    strcat(upstr, ms); strcat(upstr, "m  ");
+    strcat(upstr, ss); strcat(upstr, "s");
+    dahle_wkv(AX, AY, 4, "Uptime:  ", upstr);
+    dahle_wkv(AX, AY, 5, "Ticks:   ", ts);
+
+    uint32_t badge_y = AY + GUI_TITLE_H + 2u + 7u * (screen_char_h() + LINE_GAP);
+    gui_badge(AX + GUI_PAD, badge_y, "ONLINE", GC_WIN_BG, GC_SUCCESS);
+
+    gui_label_centered(0u, AY + AH + 14u, 800u,
+                       "Press any key to close...", GC_TEXT_DIM, TRANSPARENT);
+    keyboard_getchar();
+}
+
+/* App: About DahleOS */
+static void dahle_app_about(void) {
+    const uint32_t AW = 340u, AH = 185u;
+    const uint32_t AX = (800u - AW) / 2u;
+    const uint32_t AY = (600u - AH) / 2u;
+
+    dahle_modal_scrim();
+    gui_window(AX, AY, AW, AH, "About " OS_NAME);
+    dahle_wtext(AX, AY, 0, OS_NAME "  v" OS_VERSION, GC_TEXT);
+    dahle_wtext(AX, AY, 1, "A 32-bit bare-metal OS", GC_TEXT_DIM);
+    gui_separator(AX + GUI_PAD,
+                  AY + GUI_TITLE_H + 2u + 2u * (screen_char_h() + LINE_GAP),
+                  AW - 2u * GUI_PAD);
+    dahle_wtext(AX, AY, 3, "Architecture: x86 Protected Mode", GC_TEXT_DIM);
+    dahle_wtext(AX, AY, 4, "Display:  VESA 800x600x32 bpp", GC_TEXT_DIM);
+    dahle_wtext(AX, AY, 5, "Runtime:  QEMU i386", GC_TEXT_DIM);
+
+    gui_label_centered(0u, AY + AH + 14u, 800u,
+                       "Press any key to close...", GC_TEXT_DIM, TRANSPARENT);
+    keyboard_getchar();
+}
+
+/* ── App Launcher overlay ──────────────────────────────────── */
+static void dahle_launcher(void) {
+    const uint32_t LW = 280u, LH = 155u;
+    const uint32_t LX = (800u - LW) / 2u;
+    const uint32_t LY = (600u - LH) / 2u;
+
+    dahle_modal_scrim();
+    gui_window(LX, LY, LW, LH, "App Launcher");
+    dahle_wtext(LX, LY, 0, "[1]  System Monitor", GC_TEXT);
+    dahle_wtext(LX, LY, 1, "[2]  About " OS_NAME, GC_TEXT);
+    gui_separator(LX + GUI_PAD,
+                  LY + GUI_TITLE_H + 2u + 2u * (screen_char_h() + LINE_GAP),
+                  LW - 2u * GUI_PAD);
+    dahle_wtext(LX, LY, 3, "[ESC]  Close", GC_TEXT_DIM);
+
+    char c = keyboard_getchar();
+    if      (c == '1') dahle_app_sysmon();
+    else if (c == '2') dahle_app_about();
 }
 
 /* ── Desktop command ──────────────────────────────────────────
 
-   `dahle`  paints the graphical desktop, draws windows, and
-   waits for a keypress before returning to the shell.
+   `dahle` runs an interactive desktop with three movable windows.
+   Tab cycles focus; arrow keys nudge the focused window; ESC
+   exits; Shift+ESC opens the App Launcher.
 
-   To build your own desktop scene:
-     1.  Call  dahle_draw_desktop()  to paint the background.
-     2.  Add windows with  gui_window()  or the pre-built helpers.
-     3.  Populate content with  dahle_wtext() / dahle_wkv().
-     4.  Add buttons with  gui_button(),  badges with  gui_badge().
-     5.  Call  keyboard_getchar()  to hold the view until a key
-         is pressed, then restore the shell with screen_clear().
+   To add a new window: implement a draw function following the
+   pattern of dahle_controls_window(), extend wpos_x/wpos_y to
+   [4], increment the Tab modulus, and call it from dahle_redraw().
    ─────────────────────────────────────────────────────────── */
-
 static void cmd_dahle(const char *args) {
     (void)args;
 
-    /* ── Scene ── */
-    dahle_draw_desktop();
-    dahle_sysinfo_window(SYSINFO_X, WIN_TOP);
-    dahle_welcome_window(WELCOME_X, WIN_TOP);
+    /* Initialise window positions to the centred default layout */
+    wpos_x[0] = SYSINFO_X;  wpos_y[0] = WIN_TOP;
+    wpos_x[1] = WELCOME_X;  wpos_y[1] = WIN_TOP;
+    wpos_x[2] = CONTROLS_X; wpos_y[2] = WIN_TOP;
+    wfocus = 0;
 
-    /* Close button below the welcome window */
-    gui_button(WELCOME_X, CLOSE_BTN_Y, WELCOME_W, CLOSE_BTN_H, "Close (any key)");
+    dahle_redraw();
 
-    /* Hint centred across the full screen width */
-    gui_label_centered(0, HINT_Y, 800u,
-                       "Press any key to return to the shell.",
-                       GC_TEXT_DIM, TRANSPARENT);
+    char c;
+    while (1) {
+        c = keyboard_getchar();
 
-    /* ── Wait ── */
-    keyboard_getchar();
+        if (c == '\x1b') {                        /* ESC key              */
+            if (keyboard_shift_held()) {           /*  Shift+ESC: launcher */
+                dahle_launcher();
+                dahle_redraw();
+                continue;
+            }
+            break;                                 /*  bare ESC: exit      */
+        }
 
-    /* ── Restore shell ── */
+        if (c == '\t') {                           /* Tab: cycle focus     */
+            wfocus = (wfocus + 1) % 3;
+        } else if (c == '\x11') {                  /* ↑                    */
+            if (wpos_y[wfocus] >= MOVE_STEP + 2u)
+                wpos_y[wfocus] -= MOVE_STEP;
+        } else if (c == '\x12') {                  /* ↓                    */
+            if (wpos_y[wfocus] + MOVE_STEP < 560u)
+                wpos_y[wfocus] += MOVE_STEP;
+        } else if (c == '\x13') {                  /* ←                    */
+            if (wpos_x[wfocus] >= MOVE_STEP + 2u)
+                wpos_x[wfocus] -= MOVE_STEP;
+        } else if (c == '\x14') {                  /* →                    */
+            if (wpos_x[wfocus] + MOVE_STEP < 798u)
+                wpos_x[wfocus] += MOVE_STEP;
+        }
+
+        dahle_redraw();
+    }
+
+    /* Restore text-mode shell */
     screen_set_color(WHITE, GUI_DESKTOP);
     screen_clear();
     kprint_color("\n  " OS_NAME "  v" OS_VERSION "\n", LGREEN, GUI_DESKTOP);

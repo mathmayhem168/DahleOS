@@ -7,7 +7,7 @@
 
 static char     buf[BUF];
 static volatile int head = 0, tail = 0;
-static int shift = 0, caps = 0;
+static int shift = 0, caps = 0, ext = 0;
 
 /* US QWERTY scancode set 1 */
 static const char norm[] = {
@@ -27,14 +27,26 @@ static void kbd_handler(registers_t *r) {
     (void)r;
     uint8_t sc = port_byte_in(0x60);
 
-    if (sc == 0x2A || sc == 0x36) { shift = 1; return; }
-    if (sc == 0xAA || sc == 0xB6) { shift = 0; return; }
-    if (sc == 0x3A) { caps = !caps; return; }
-    if (sc & 0x80) return; /* key release, ignore */
+    if (sc == 0xE0) { ext = 1; return; }                /* extended prefix   */
+    if (sc == 0x2A || sc == 0x36) { shift = 1; ext = 0; return; }
+    if (sc == 0xAA || sc == 0xB6) { shift = 0; ext = 0; return; }
+    if (sc == 0x3A) { caps = !caps; ext = 0; return; }
+    if (sc & 0x80) { ext = 0; return; }                 /* key release       */
 
     char c = 0;
-    if (sc < (uint8_t)sizeof(norm))
-        c = (shift ^ caps) ? shft[sc] : norm[sc];
+    if (ext) {
+        /* Map PS/2 extended arrow scancodes to private control chars */
+        switch (sc) {
+            case 0x48: c = '\x11'; break;  /* Up    */
+            case 0x50: c = '\x12'; break;  /* Down  */
+            case 0x4B: c = '\x13'; break;  /* Left  */
+            case 0x4D: c = '\x14'; break;  /* Right */
+        }
+        ext = 0;
+    } else {
+        if (sc < (uint8_t)sizeof(norm))
+            c = (shift ^ caps) ? shft[sc] : norm[sc];
+    }
     if (!c) return;
 
     int next = (head + 1) % BUF;
@@ -52,4 +64,5 @@ char keyboard_getchar(void) {
     return c;
 }
 
-int keyboard_poll(void) { return head != tail; }
+int keyboard_poll(void)       { return head != tail; }
+int keyboard_shift_held(void) { return shift; }
