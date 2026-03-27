@@ -34,6 +34,7 @@ DahleOS uses:
 
 v0.0.0 - A core system, with basic commands. CLI-only.
 v0.1.0 - Implemented some basic GUI, with window positioning.
+v0.1.1 - Polished README.md file
 
 
 
@@ -45,8 +46,9 @@ v0.1.0 - Implemented some basic GUI, with window positioning.
 
 ## Statistics
 
-Current Version: 0.1.0
+Current Version: 1.1.1
 Current Status: Probably coding
+First Version: 1.0.0
 
 
 ---

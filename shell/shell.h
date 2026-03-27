@@ -6,7 +6,7 @@
    ================================================================ */
 
 #define OS_NAME       "DahleOS"
-#define OS_VERSION    "1.0.0"
+#define OS_VERSION    "1.1.1"
 
 /* The prompt printed before every line of input */
 #define SHELL_PROMPT  "DahleOS > "
