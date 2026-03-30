@@ -32,10 +32,9 @@ DahleOS uses:
 
 ### Timeline
 
-v1.0.0 - A core system, with basic commands. CLI-only.
-v1.1.0 - Implemented some basic GUI, with window positioning.
-v1.1.1 - Polished README.md file
-v1.1.2 - Polished information files
+v0.0.0 - A core system, with basic commands. CLI-only.
+v0.1.0 - Implemented some basic GUI, with window positioning.
+v0.1.1 - Polished README.md file
 
 
 
@@ -44,21 +43,6 @@ v1.1.2 - Polished information files
 
 ---
 
-
-
-
-## How To Run
-
-To run DahleOS, it's really easy!
-
-Step 1 - Go into your terminal. (MacOS -> Terminal, Windows -> Command Prompt..)
-Step 2 - Type 'make' and then 'make run'.
-Step 3 - You should see a window with the name QEMU or something like this. That's the OS!
-
-(Side note: type 'help' in the OS window for commands.)
-
-
----
 
 ## Statistics
 
