@@ -38,6 +38,7 @@ static void cmd_halt   (const char *args);
 static void cmd_scp    (const char *args);
 static void cmd_dahle  (const char *args);
 static void cmd_kernelpanic(const char *args);
+static void cmd_repeat(const char *args);
 
 
 /* ================================================================
@@ -56,6 +57,7 @@ cmd_t cmd_table[] = {
     { "scp",        "Print a random integer within a range", cmd_scp        },
     { "dahle",      "Launch the graphical desktop",          cmd_dahle      },
     { "kernelpanic","Simulate a kernel panic",               cmd_kernelpanic},
+    { "repeat", "Repeat a command N times", cmd_repeat },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -555,4 +557,39 @@ static void cmd_kernelpanic(const char *args) {
     /* Phase 6: wait for keypress, then reboot */
     keyboard_getchar();
     cmd_reboot(NULL);
+}
+
+static void cmd_repeat(const char *args) {
+    if (!args || !*args) {
+        kprint("Usage: repeat <n> <cmd>\n");
+        kprint("Example: repeat 5 echo Hello\n");
+        return;
+    }
+    // parse the count
+    char count_str[12] = {0};
+    int i = 0;
+    while (args[i] && args[i] != ' ' && i < 11)
+        count_str[i] = args[i++];
+
+    // skip space
+    while (args[i] == ' ') i++;
+
+    // rest is the command + its args
+    const char *subcmd = &args[i];
+
+    if (!*subcmd) {
+        kprint("Usage: repeat <n> <command>\n");
+        return;
+    }
+
+    int count = str_to_int(count_str);
+
+    if (count <= 0 || count > 100) {
+        kprint("Error: count must be between 1 and 100\n");
+        return;
+    }
+
+    for (int r = 0; r < count; r++) {
+        shell_execute(subcmd);
+    }
 }

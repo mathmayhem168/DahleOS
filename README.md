@@ -62,7 +62,7 @@ Step 3 - You should see a window with the name QEMU or something like this. That
 
 ## Statistics
 
-Current Version: 1.1.1
+Current Version: 1.1.2
 Current Status: Probably coding
 First Version: 1.0.0
 

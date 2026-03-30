@@ -6,7 +6,7 @@
    ================================================================ */
 
 #define OS_NAME       "DahleOS"
-#define OS_VERSION    "1.1.1"
+#define OS_VERSION    "1.1.2"
 
 /* The prompt printed before every line of input */
 #define SHELL_PROMPT  "DahleOS > "
@@ -19,4 +19,5 @@
 
 /* ================================================================ */
 void shell_run(void);
+void shell_execute(const char *input);
 #endif

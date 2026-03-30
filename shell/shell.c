@@ -161,3 +161,26 @@ void shell_run(void) {
         }
     }
 }
+
+// shell.c
+void shell_execute(const char *input) {
+    // parse command name and args from input
+    char cmd[32] = {0};
+    int i = 0;
+
+    while (input[i] && input[i] != ' ' && i < 31)
+        cmd[i] = input[i++];
+    while (input[i] == ' ') i++;
+    const char *args = &input[i];
+
+    // your existing command dispatch
+    if (kstrcmp(cmd, "echo") == 0)       cmd_echo(args);
+    else if (kstrcmp(cmd, "clear") == 0) cmd_clear(args);
+    else if (kstrcmp(cmd, "repeat") == 0) cmd_repeat(args);
+    // ... rest of your commands
+    else {
+        kprint("Unknown command: ");
+        kprint(cmd);
+        kprint("\n");
+    }
+}
