@@ -39,6 +39,7 @@ static void cmd_scp    (const char *args);
 static void cmd_dahle  (const char *args);
 static void cmd_kernelpanic(const char *args);
 static void cmd_repeat(const char *args);
+static void cmd_about(const char *args);
 
 
 /* ================================================================
@@ -58,6 +59,7 @@ cmd_t cmd_table[] = {
     { "dahle",      "Launch the graphical desktop",          cmd_dahle      },
     { "kernelpanic","Simulate a kernel panic",               cmd_kernelpanic},
     { "repeat", "Repeat a command N times", cmd_repeat },
+    { "about", "About this operating system", cmd_about },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -568,8 +570,10 @@ static void cmd_repeat(const char *args) {
     // parse the count
     char count_str[12] = {0};
     int i = 0;
-    while (args[i] && args[i] != ' ' && i < 11)
-        count_str[i] = args[i++];
+    while (args[i] && args[i] != ' ' && i < 11) {
+        count_str[i] = args[i];
+        i++;
+    }
 
     // skip space
     while (args[i] == ' ') i++;
@@ -592,4 +596,12 @@ static void cmd_repeat(const char *args) {
     for (int r = 0; r < count; r++) {
         shell_execute(subcmd);
     }
+}
+
+static void cmd_about(const char *args) {
+    (void)args;
+    kprint("DahleOS ");
+    kprint_color(OS_VERSION, CYAN, BLACK);
+    kprint("\nBy Dionysios Yi Pei-Chen.\n");
+    kprint("- 'A mini operating system not to be official.'\n");
 }
