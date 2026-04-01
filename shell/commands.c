@@ -22,6 +22,7 @@
 #include "../cpu/timer.h"
 #include "../libc/string.h"
 #include "../libc/mem.h"
+#include "../fs/fs.h"
 
 
 /* ----------------------------------------------------------------
@@ -40,6 +41,14 @@ static void cmd_dahle  (const char *args);
 static void cmd_kernelpanic(const char *args);
 static void cmd_repeat(const char *args);
 static void cmd_about(const char *args);
+/* filesystem commands */
+static void cmd_pwd   (const char *args);
+static void cmd_ls    (const char *args);
+static void cmd_mkdir (const char *args);
+static void cmd_touch (const char *args);
+static void cmd_rm    (const char *args);
+static void cmd_cd    (const char *args);
+static void cmd_cat   (const char *args);
 
 
 /* ================================================================
@@ -60,6 +69,14 @@ cmd_t cmd_table[] = {
     { "kernelpanic","Simulate a kernel panic",               cmd_kernelpanic},
     { "repeat", "Repeat a command N times", cmd_repeat },
     { "about", "About this operating system", cmd_about },
+    /* filesystem */
+    { "pwd",   "Print working directory",         cmd_pwd   },
+    { "ls",    "List directory contents",         cmd_ls    },
+    { "mkdir", "Create a directory  -  mkdir <name>",  cmd_mkdir },
+    { "touch", "Create an empty file  -  touch <name>", cmd_touch },
+    { "rm",    "Remove a file  -  rm <name>",     cmd_rm    },
+    { "cd",    "Change directory  -  cd <path>",  cmd_cd    },
+    { "cat",   "Print file contents  -  cat <name>", cmd_cat },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -604,4 +621,51 @@ static void cmd_about(const char *args) {
     kprint_color(OS_VERSION, CYAN, BLACK);
     kprint("\nBy Dionysios Yi Pei-Chen.\n");
     kprint("- 'A mini operating system not to be official.'\n");
+}
+
+/* ================================================================
+   FILESYSTEM COMMANDS
+   Each wrapper parses the first token from args and delegates to
+   the fs layer (fs/fs.c).  All path logic lives there.
+   ================================================================ */
+
+/* Extract first whitespace-delimited token from args into out[]. */
+static void first_token(const char *args, char *out, int max) {
+    int i = 0;
+    while (args && args[i] && args[i] != ' ' && i < max - 1) {
+        out[i] = args[i]; i++;
+    }
+    out[i] = '\0';
+}
+
+static void cmd_pwd(const char *args)   { (void)args; fs_cmd_pwd(); }
+static void cmd_ls (const char *args)   { (void)args; fs_cmd_ls();  }
+
+static void cmd_mkdir(const char *args) {
+    char name[FS_MAX_NAME] = {0};
+    first_token(args, name, FS_MAX_NAME);
+    fs_cmd_mkdir(name[0] ? name : (void *)0);
+}
+
+static void cmd_touch(const char *args) {
+    char name[FS_MAX_NAME] = {0};
+    first_token(args, name, FS_MAX_NAME);
+    fs_cmd_touch(name[0] ? name : (void *)0);
+}
+
+static void cmd_rm(const char *args) {
+    char name[FS_MAX_NAME] = {0};
+    first_token(args, name, FS_MAX_NAME);
+    fs_cmd_rm(name[0] ? name : (void *)0);
+}
+
+static void cmd_cd(const char *args) {
+    /* pass full args as path so 'cd /home/tmp' works */
+    fs_cmd_cd(args);
+}
+
+static void cmd_cat(const char *args) {
+    char name[FS_MAX_NAME] = {0};
+    first_token(args, name, FS_MAX_NAME);
+    fs_cmd_cat(name[0] ? name : (void *)0);
 }

@@ -13,6 +13,7 @@
 #include "../drivers/keyboard.h"
 #include "../libc/string.h"
 #include "../libc/mem.h"
+#include "../fs/fs.h"
 
 /* ---- input line state ---- */
 static char line[LINE_MAX];
@@ -70,7 +71,9 @@ static void run(const char *input) {
 }
 
 static void print_prompt(void) {
-    kprint_color(SHELL_PROMPT, LGREEN, BLACK);
+    kprint_color("DahleOS:", LGREEN, BLACK);
+    kprint_color(fs_pwd_str(), LCYAN, BLACK);
+    kprint_color(" > ", LGREEN, BLACK);
 }
 
 /* ================================================================
@@ -82,6 +85,7 @@ void shell_execute(const char *input) {
 }
 
 void shell_run(void) {
+    fs_init();
     kprint_color("  Welcome to " OS_NAME " " OS_VERSION "!\n", LCYAN, BLACK);
     kprint("  Type ");
     kprint_color("help", LGREEN, BLACK);

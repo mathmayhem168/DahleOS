@@ -35,6 +35,7 @@ C_SRC := \
     drivers/keyboard.c  \
     libc/string.c       \
     libc/mem.c          \
+    fs/fs.c             \
     shell/commands.c    \
     shell/shell.c
 
