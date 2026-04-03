@@ -10,6 +10,10 @@ to be official, though, like my OS.
 
 ---
 
+## How Do You Run It?
+It's easy! Just go to the GitHub repository directory (ostests), and in your terminal, type "make". Follow the instructions
+and hopefully a window will show up containing the OS.
+
 
 ## What is DahleOS?
 DahleOS is a small operating system that I run on MacOS. It's nothing official though.
@@ -32,11 +36,14 @@ DahleOS uses:
 
 ### Timeline
 
-v0.0.0 - A core system, with basic commands. CLI-only.
-v0.1.0 - Implemented some basic GUI, with window positioning.
-v0.1.1 - Polished README.md file
-
-
+v1.0.0 - A core system, with basic commands. CLI-only.
+v1.1.0 - Implemented some basic GUI, with window positioning.
+v1.1.1 - Polished README.md file
+v1.1.2 - Polished information files
+v1.1.3 - Introduces new command (repeat)
+v1.2.1 - Add about command
+v1.3.1 - Introduce basic file system
+v1.4.1 - Implement ALU
 
 
 
@@ -46,7 +53,7 @@ v0.1.1 - Polished README.md file
 
 ## Statistics
 
-Current Version: 1.1.2
+Current Version: 1.4.1
 Current Status: Probably coding
 First Version: 1.0.0
 

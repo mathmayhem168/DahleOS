@@ -49,6 +49,9 @@ static void cmd_touch (const char *args);
 static void cmd_rm    (const char *args);
 static void cmd_cd    (const char *args);
 static void cmd_cat   (const char *args);
+/* computing commands */
+static void cmd_alu  (const char *args);
+
 
 
 /* ================================================================
@@ -77,6 +80,8 @@ cmd_t cmd_table[] = {
     { "rm",    "Remove a file  -  rm <name>",     cmd_rm    },
     { "cd",    "Change directory  -  cd <path>",  cmd_cd    },
     { "cat",   "Print file contents  -  cat <name>", cmd_cat },
+    /* computing */
+    { "alu",   "ALU op  -  alu <a> <b> <+|-|*|/>",  cmd_alu  },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -669,3 +674,119 @@ static void cmd_cat(const char *args) {
     first_token(args, name, FS_MAX_NAME);
     fs_cmd_cat(name[0] ? name : (void *)0);
 }
+
+/* ================================================================
+   ALU  —  arithmetic on decimal or binary (0b…) operands
+   ================================================================ */
+
+/* Convert binary string "101" → 5.  Returns -1 on bad input. */
+static int bin_to_int(const char *s) {
+    int result = 0;
+    if (!s || !*s) return -1;
+    while (*s) {
+        if (*s != '0' && *s != '1') return -1;
+        result = (result << 1) | (*s - '0');
+        s++;
+    }
+    return result;
+}
+
+/* Convert integer n → null-terminated binary string in buf.
+   buf must be at least 33 bytes.  Negative values get a '-' prefix. */
+static void int_to_bin(int n, char *buf) {
+    if (n == 0) { buf[0] = '0'; buf[1] = '\0'; return; }
+
+    int neg = 0;
+    if (n < 0) { neg = 1; n = -n; }
+
+    char tmp[33];
+    int  i = 0;
+    unsigned int u = (unsigned int)n;
+    while (u) { tmp[i++] = (char)('0' + (u & 1)); u >>= 1; }
+
+    int out = 0;
+    if (neg) buf[out++] = '-';
+    for (int j = i - 1; j >= 0; j--) buf[out++] = tmp[j];
+    buf[out] = '\0';
+}
+
+/* Parse a token: "0b101" or "101" treated as binary, else decimal. */
+static int parse_operand(const char *s, int *out) {
+    if (!s || !*s) return 0;
+    if (s[0] == '0' && (s[1] == 'b' || s[1] == 'B')) {
+        int v = bin_to_int(s + 2);
+        if (v < 0) return 0;
+        *out = v;
+        return 1;
+    }
+    /* decimal (may be negative) */
+    *out = str_to_int(s);
+    return 1;
+}
+
+static void cmd_alu(const char *args) {
+    if (!args || !*args) {
+        kprint("Usage: alu <a> <b> <+|-|*|/>\n");
+        kprint("  Operands can be decimal or binary with 0b prefix.\n");
+        kprint("  Example: alu 5 8 +   or   alu 0b0101 0b1000 +\n");
+        return;
+    }
+
+    /* Parse three whitespace-separated tokens: a, b, op */
+    char tok[3][20] = {{0},{0},{0}};
+    int  ti = 0, ci = 0;
+    const char *p = args;
+    while (*p && ti < 3) {
+        while (*p == ' ') p++;
+        ci = 0;
+        while (*p && *p != ' ' && ci < 19) tok[ti][ci++] = *p++;
+        tok[ti][ci] = '\0';
+        if (ci) ti++;
+    }
+
+    if (ti < 3) {
+        kprint("Usage: alu <a> <b> <+|-|*|/>\n");
+        return;
+    }
+
+    int a, b;
+    if (!parse_operand(tok[0], &a) || !parse_operand(tok[1], &b)) {
+        kprint_color("Error: invalid operand\n", LRED, BLACK);
+        return;
+    }
+
+    char op = tok[2][0];
+    int  result;
+    switch (op) {
+        case '+': result = a + b; break;
+        case '-': result = a - b; break;
+        case '*': result = a * b; break;
+        case '/':
+            if (b == 0) { kprint_color("Error: division by zero\n", LRED, BLACK); return; }
+            result = a / b;
+            break;
+        default:
+            kprint_color("Error: unknown operator (use +, -, *, /)\n", LRED, BLACK);
+            return;
+    }
+
+    /* Print decimal result */
+    kprint("=");
+    kprint_color_int(result, LGREEN, BLACK);
+    kprint("\n");
+
+    /* Also show binary representations */
+    char ba[34], bb[34], br[34];
+    int_to_bin(a,      ba);
+    int_to_bin(b,      bb);
+    int_to_bin(result, br);
+    kprint("  bin: 0b"); kprint(ba);
+    kprint(" "); kprint(tok[2]);
+    kprint(" 0b"); kprint(bb);
+    kprint(" = 0b"); kprint_color(br, LGREEN, BLACK);
+    kprint("\n");
+}
+
+
+
+
