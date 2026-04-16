@@ -49,6 +49,8 @@ static void redraw_line(const char *s) {
 }
 
 /* ---- command dispatch ---- */
+static int run_depth = 0;   /* recursion guard for alias loops */
+
 static void run(const char *input) {
     while (*input == ' ') input++;
     if (!*input) return;
@@ -59,12 +61,35 @@ static void run(const char *input) {
     const char *args = input + i;
     while (*args == ' ') args++;
 
+    /* Check built-in command table first */
     for (int c = 0; c < cmd_count; c++) {
         if (strcmp(cmd_table[c].name, name) == 0) {
             cmd_table[c].fn(args);
             return;
         }
     }
+
+    /* Not a built-in — check alias table (Option B) */
+    const char *expanded = alias_resolve(name);
+    if (expanded) {
+        if (run_depth > 8) {
+            kprint_color("Error: alias loop detected\n", LRED, BLACK);
+            run_depth = 0;
+            return;
+        }
+        /* Build: expanded_value + " " + original args (if any) */
+        char full[256] = {0};
+        strncpy(full, expanded, 254);
+        if (*args) {
+            strcat(full, " ");
+            strcat(full, args);
+        }
+        run_depth++;
+        run(full);
+        run_depth--;
+        return;
+    }
+
     kprint_color("Unknown command: ", LRED, BLACK);
     kprint(name);
     kprint("  (type 'help')\n");

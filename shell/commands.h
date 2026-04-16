@@ -12,4 +12,7 @@ typedef struct {
 extern cmd_t  cmd_table[];
 extern int    cmd_count;
 
+/* Alias resolution — returns expanded value or NULL (used by shell.c run()) */
+const char *alias_resolve(const char *name);
+
 #endif

@@ -54,6 +54,38 @@ static void cmd_alu  (const char *args);
 /* modifying commands */
 static void cmd_upper (const char *args);
 static void cmd_lower (const char *args);
+static void cmd_alias (const char *args);   // Maybe will be replaced with something like /.dahlerc
+
+/* ================================================================
+   DEFINITIONS  –  definitions for things like aliases
+   ================================================================ */
+#define ALIAS_MAX 16        // maximum amount of aliases
+#define ALIAS_NAME_MAX 32   // maximum length for alias name
+#define ALIAS_VAL_MAX 128   // maximum length for the alias's value or what it expands to
+
+
+
+
+
+
+/* ================================================================
+   STRUCTURES - use for helpers or commands
+   ================================================================ */
+
+typedef struct {
+    char name[ALIAS_NAME_MAX];
+    char value[ALIAS_VAL_MAX];
+} alias_t;
+
+
+/* ================================================================
+   DATA - use for helpers only like an alias list
+   ================================================================ */
+
+static alias_t alias_table[ALIAS_MAX];
+static int alias_count = 0;
+
+
 
 
 
@@ -87,6 +119,7 @@ cmd_t cmd_table[] = {
     { "alu",   "ALU op  -  alu <a> <b> <+|-|*|/>",  cmd_alu  },
     { "upper", "Outputs the input in all uppercases", cmd_upper },
     { "lower", "Outputs the input in all lowercases", cmd_lower },
+    { "alias", "Aliases a special name for a built-in command", cmd_alias },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -837,4 +870,64 @@ static void cmd_lower(const char *args) {
 
     kprint(buf);
     kprint("\n");
+}
+
+/* Returns the expanded value for a given alias name, or NULL if not found.
+   Called by shell.c run() — this is the Option B bridge. */
+const char *alias_resolve(const char *name) {
+    for (int i = 0; i < alias_count; i++)
+        if (strcmp(alias_table[i].name, name) == 0)
+            return alias_table[i].value;
+    return (void *)0;
+}
+
+static void cmd_alias(const char *args) {
+    // No args → list all aliases
+    if (!args || !*args) {
+        if (alias_count == 0) {
+            kprint("No aliases defined.\n");
+            return;
+        }
+        for (int i = 0; i < alias_count; i++) {
+            kprint_color(alias_table[i].name, LGREEN, BLACK);
+            kprint(" -> ");
+            kprint(alias_table[i].value);
+            kprint("\n");
+        }
+        return;
+    }
+
+    // Parse: alias <name> <value>
+    char name[ALIAS_NAME_MAX] = {0};
+    int i = 0;
+    while (args[i] && args[i] != ' ' && i < ALIAS_NAME_MAX - 1) {
+        name[i] = args[i]; i++;
+    }
+    while (args[i] == ' ') i++;
+    const char *value = args + i;
+
+    if (!name[0] || !*value) {
+        kprint("Usage: alias <name> <command>\n");
+        kprint("       alias              (list all)\n");
+        return;
+    }
+
+    // Update existing alias if name matches
+    for (int a = 0; a < alias_count; a++) {
+        if (strcmp(alias_table[a].name, name) == 0) {
+            strncpy(alias_table[a].value, value, ALIAS_VAL_MAX - 1);
+            kprint("Alias updated.\n");
+            return;
+        }
+    }
+
+    // Add new alias
+    if (alias_count >= ALIAS_MAX) {
+        kprint_color("Error: alias table full\n", LRED, BLACK);
+        return;
+    }
+    strncpy(alias_table[alias_count].name,  name,  ALIAS_NAME_MAX - 1);
+    strncpy(alias_table[alias_count].value, value, ALIAS_VAL_MAX  - 1);
+    alias_count++;
+    kprint("Alias set.\n");
 }

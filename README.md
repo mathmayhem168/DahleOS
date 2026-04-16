@@ -44,7 +44,7 @@ v1.1.3 - Introduces new command (repeat)
 v1.2.1 - Add about command
 v1.3.1 - Introduce basic file system
 v1.4.1 - Implement ALU
-
+v1.5.1 - Implemented upper and lower commands
 
 
 
@@ -53,7 +53,7 @@ v1.4.1 - Implement ALU
 
 ## Statistics
 
-Current Version: 1.4.1
+Current Version: 1.5.1
 Current Status: Probably coding
 First Version: 1.0.0
 
