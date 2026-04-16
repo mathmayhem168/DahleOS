@@ -51,6 +51,9 @@ static void cmd_cd    (const char *args);
 static void cmd_cat   (const char *args);
 /* computing commands */
 static void cmd_alu  (const char *args);
+/* modifying commands */
+static void cmd_upper (const char *args);
+static void cmd_lower (const char *args);
 
 
 
@@ -82,6 +85,8 @@ cmd_t cmd_table[] = {
     { "cat",   "Print file contents  -  cat <name>", cmd_cat },
     /* computing */
     { "alu",   "ALU op  -  alu <a> <b> <+|-|*|/>",  cmd_alu  },
+    { "upper", "Outputs the input in all uppercases", cmd_upper },
+    { "lower", "Outputs the input in all lowercases", cmd_lower },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -790,3 +795,46 @@ static void cmd_alu(const char *args) {
 
 
 
+static void cmd_upper(const char *args) {
+    if (!args || !*args) {
+        kprint("Usage: upper <s>\n");
+        kprint("Example: upper example -> EXAMPLE\n");
+        return;
+    }
+    char buf[LINE_MAX];
+    int i = 0;
+    while (args[i] && i < LINE_MAX - 1) {
+        char c = args[i];
+        if (c >= 'a' && c <= 'z') { // ASCII equivalent of lowercase to uppercase
+            c = c - 32;
+        }
+        buf[i] = c;
+        i += 1;
+    }
+    buf[i] = '\0';
+
+    kprint(buf);
+    kprint("\n");
+}
+
+static void cmd_lower(const char *args) {
+    if (!args || !*args) {
+        kprint("Usage: lower <s>\n");
+        kprint("Example: lower EXAMPLE -> example\n");
+        return;
+    }
+    char buf[LINE_MAX];
+    int i = 0;
+    while (args[i] && i < LINE_MAX - 1) {
+        char c = args[i];
+        if (c >= 'A' && c <= 'Z') { // ASCII equivalent of uppercase to lowercase
+            c = c + 32;
+        }
+        buf[i] = c;
+        i += 1;
+    }
+    buf[i] = '\0';
+
+    kprint(buf);
+    kprint("\n");
+}
