@@ -28,6 +28,7 @@
 #include "../drivers/screen.h"
 #include "../libc/string.h"
 #include "../libc/mem.h"
+#include "../storage/persist.h"
 
 /* ---- internal pool ---- */
 static fs_node_t pool[FS_MAX_NODES];
@@ -158,8 +159,11 @@ void fs_cmd_mkdir(const char *name) {
     if (idx < 0) { kprint_color("mkdir: filesystem full\n", LRED, BLACK); return; }
     strncpy(pool[idx].name, name, FS_MAX_NAME - 1);
     pool[idx].type = FS_DIR;
-    if (node_add_child(cwd, idx) < 0)
+    if (node_add_child(cwd, idx) < 0) {
         kprint_color("mkdir: parent directory full\n", LRED, BLACK);
+        return;
+    }
+    persist_save_fs();
 }
 
 void fs_cmd_touch(const char *name) {
@@ -169,8 +173,11 @@ void fs_cmd_touch(const char *name) {
     if (idx < 0) { kprint_color("touch: filesystem full\n", LRED, BLACK); return; }
     strncpy(pool[idx].name, name, FS_MAX_NAME - 1);
     pool[idx].type = FS_FILE;
-    if (node_add_child(cwd, idx) < 0)
+    if (node_add_child(cwd, idx) < 0) {
         kprint_color("touch: parent directory full\n", LRED, BLACK);
+        return;
+    }
+    persist_save_fs();
 }
 
 void fs_cmd_rm(const char *name) {
@@ -195,6 +202,7 @@ void fs_cmd_rm(const char *name) {
         }
     }
     memset(pool[child].name, 0, FS_MAX_NAME);   /* mark node slot as dead */
+    persist_save_fs();
 }
 
 void fs_cmd_cd(const char *path) {
@@ -236,6 +244,7 @@ void fs_cmd_cd(const char *path) {
         cur = child;
     }
     cwd = cur;
+    persist_save_fs();
 }
 
 void fs_cmd_cat(const char *name) {
@@ -253,3 +262,24 @@ void fs_cmd_cat(const char *name) {
     kprint(pool[child].data);
     kprint("\n");
 }
+
+/* ---- Persistence accessors ---- */
+
+void fs_init_empty(void) {
+    memset(pool, 0, sizeof(pool));
+    pool_used = 0;
+    cwd       = 0;
+}
+
+void fs_load_state(int saved_pool_used, int saved_cwd,
+                   const void *pool_data, uint32_t pool_data_len) {
+    uint32_t copy_len = pool_data_len < sizeof(pool) ? pool_data_len : (uint32_t)sizeof(pool);
+    memcpy(pool, pool_data, copy_len);
+    pool_used = saved_pool_used;
+    cwd       = saved_cwd;
+}
+
+int      fs_get_pool_used(void) { return pool_used; }
+int      fs_get_cwd(void)       { return cwd; }
+const void *fs_get_pool_ptr(void)  { return pool; }
+uint32_t    fs_get_pool_size(void) { return (uint32_t)sizeof(pool); }

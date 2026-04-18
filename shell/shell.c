@@ -14,6 +14,7 @@
 #include "../libc/string.h"
 #include "../libc/mem.h"
 #include "../fs/fs.h"
+#include "../storage/persist.h"
 
 /* ---- input line state ---- */
 static char line[LINE_MAX];
@@ -110,7 +111,14 @@ void shell_execute(const char *input) {
 }
 
 void shell_run(void) {
-    fs_init();
+    fs_init_empty();
+    if (persist_probe()) {
+        persist_load_aliases();
+        if (persist_load_fs() != ATA_OK)
+            fs_init();   /* no FS data saved yet — create default tree */
+    } else {
+        fs_init();
+    }
     kprint_color("  Welcome to " OS_NAME " " OS_VERSION "!\n", LCYAN, BLACK);
     kprint("  Type ");
     kprint_color("help", LGREEN, BLACK);

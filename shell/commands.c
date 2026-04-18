@@ -23,6 +23,7 @@
 #include "../libc/string.h"
 #include "../libc/mem.h"
 #include "../fs/fs.h"
+#include "../storage/persist.h"
 
 
 /* ----------------------------------------------------------------
@@ -55,6 +56,8 @@ static void cmd_alu  (const char *args);
 static void cmd_upper (const char *args);
 static void cmd_lower (const char *args);
 static void cmd_alias (const char *args);   // Maybe will be replaced with something like /.dahlerc
+static void cmd_save  (const char *args);
+static void cmd_load  (const char *args);
 
 /* ================================================================
    DEFINITIONS  –  definitions for things like aliases
@@ -120,6 +123,8 @@ cmd_t cmd_table[] = {
     { "upper", "Outputs the input in all uppercases", cmd_upper },
     { "lower", "Outputs the input in all lowercases", cmd_lower },
     { "alias", "Aliases a special name for a built-in command", cmd_alias },
+    { "save",  "Save aliases and filesystem to disk",          cmd_save  },
+    { "load",  "Load aliases and filesystem from disk",        cmd_load  },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -917,6 +922,7 @@ static void cmd_alias(const char *args) {
         if (strcmp(alias_table[a].name, name) == 0) {
             strncpy(alias_table[a].value, value, ALIAS_VAL_MAX - 1);
             kprint("Alias updated.\n");
+            persist_save_aliases();
             return;
         }
     }
@@ -930,4 +936,42 @@ static void cmd_alias(const char *args) {
     strncpy(alias_table[alias_count].value, value, ALIAS_VAL_MAX  - 1);
     alias_count++;
     kprint("Alias set.\n");
+    persist_save_aliases();
+}
+
+static void cmd_save(const char *args) {
+    (void)args;
+    int r1 = persist_save_aliases();
+    int r2 = persist_save_fs();
+    if (r1 == ATA_OK && r2 == ATA_OK)
+        kprint_color("Saved to disk.\n", LGREEN, BLACK);
+    else
+        kprint_color("Error: disk write failed.\n", LRED, BLACK);
+}
+
+static void cmd_load(const char *args) {
+    (void)args;
+    int r1 = persist_load_aliases();
+    int r2 = persist_load_fs();
+    if (r1 == ATA_OK && r2 == ATA_OK)
+        kprint_color("Loaded from disk.\n", LGREEN, BLACK);
+    else
+        kprint_color("Error: no saved data or disk read failed.\n", LRED, BLACK);
+}
+
+/* ---- Alias persistence accessors ---- */
+
+int alias_get_count(void) { return alias_count; }
+
+const void *alias_get_table_ptr(void) { return alias_table; }
+
+uint32_t alias_get_table_size(void) {
+    return (uint32_t)(sizeof(alias_t) * ALIAS_MAX);
+}
+
+void alias_set_count(int n) { alias_count = n; }
+
+void alias_set_table(const void *src, uint32_t len) {
+    uint32_t max = (uint32_t)sizeof(alias_table);
+    memcpy(alias_table, src, len < max ? len : max);
 }

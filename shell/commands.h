@@ -15,4 +15,11 @@ extern int    cmd_count;
 /* Alias resolution — returns expanded value or NULL (used by shell.c run()) */
 const char *alias_resolve(const char *name);
 
+/* Persistence accessors — used only by storage/persist.c */
+int         alias_get_count(void);
+const void *alias_get_table_ptr(void);
+uint32_t    alias_get_table_size(void);
+void        alias_set_count(int n);
+void        alias_set_table(const void *src, uint32_t len);
+
 #endif

@@ -29,6 +29,7 @@ C_SRC := \
     cpu/irq.c           \
     cpu/timer.c         \
     drivers/port.c      \
+    drivers/ata.c       \
     drivers/screen.c    \
     drivers/gui.c       \
     drivers/font.c      \
@@ -36,6 +37,7 @@ C_SRC := \
     libc/string.c       \
     libc/mem.c          \
     fs/fs.c             \
+    storage/persist.c   \
     shell/commands.c    \
     shell/shell.c
 
@@ -70,8 +72,12 @@ os.bin: $(OBJS)
 %_s.o: %.asm
 	$(AS) $(ASFLAGS) $< -o $@
 
-run: os.bin
-	qemu-system-i386 -kernel os.bin -vga std
+disk.img:
+	@test -f disk.img || dd if=/dev/zero of=disk.img bs=512 count=2048
+
+run: os.bin disk.img
+	qemu-system-i386 -kernel os.bin -vga std \
+	    -drive file=disk.img,format=raw,if=ide,index=0,media=disk
 
 iso: os.bin
 	mkdir -p iso/boot/grub
@@ -82,5 +88,5 @@ iso: os.bin
 	@echo "ISO → dahleos.iso"
 
 clean:
-	rm -f $(OBJS) os.bin dahleos.iso
+	rm -f $(OBJS) os.bin dahleos.iso disk.img
 	rm -rf iso

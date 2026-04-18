@@ -33,6 +33,19 @@ typedef struct {
 /* Call once before the shell starts. Creates root "/" and starter dirs. */
 void fs_init(void);
 
+/* Zero the pool without creating any starter dirs — call before loading from disk. */
+void fs_init_empty(void);
+
+/* Restore pool from a serialized snapshot (called by persist_load_fs). */
+void fs_load_state(int saved_pool_used, int saved_cwd,
+                   const void *pool_data, uint32_t pool_data_len);
+
+/* Persistence accessors — used only by storage/persist.c */
+int         fs_get_pool_used(void);
+int         fs_get_cwd(void);
+const void *fs_get_pool_ptr(void);
+uint32_t    fs_get_pool_size(void);
+
 /* Returns a static string of the absolute path to the current directory.
    Example: "/home/projects"
    The buffer is overwritten on every call – copy it if you need to keep it. */

@@ -34,7 +34,7 @@ DahleOS uses:
 
 ## Documentation - Versions
 
-### Timeline
+### Changelog
 
 v1.0.0 - A core system, with basic commands. CLI-only.
 v1.1.0 - Implemented some basic GUI, with window positioning.
@@ -45,7 +45,7 @@ v1.2.1 - Add about command
 v1.3.1 - Introduce basic file system
 v1.4.1 - Implement ALU
 v1.5.1 - Implemented upper and lower commands
-
+v1.6.1 - Implemented aliases commands
 
 
 ---
@@ -53,7 +53,7 @@ v1.5.1 - Implemented upper and lower commands
 
 ## Statistics
 
-Current Version: 1.5.1
+**Version:** 1.6.1
 Current Status: Probably coding
 First Version: 1.0.0
 
