@@ -56,8 +56,9 @@ static void cmd_alu  (const char *args);
 static void cmd_upper (const char *args);
 static void cmd_lower (const char *args);
 static void cmd_alias (const char *args);   // Maybe will be replaced with something like /.dahlerc
-static void cmd_save  (const char *args);
-static void cmd_load  (const char *args);
+static void cmd_save     (const char *args);
+static void cmd_load     (const char *args);
+static void cmd_savelist (const char *args);
 
 /* ================================================================
    DEFINITIONS  –  definitions for things like aliases
@@ -123,8 +124,9 @@ cmd_t cmd_table[] = {
     { "upper", "Outputs the input in all uppercases", cmd_upper },
     { "lower", "Outputs the input in all lowercases", cmd_lower },
     { "alias", "Aliases a special name for a built-in command", cmd_alias },
-    { "save",  "Save aliases and filesystem to disk",          cmd_save  },
-    { "load",  "Load aliases and filesystem from disk",        cmd_load  },
+    { "save",     "Save everything in the save list to disk",       cmd_save     },
+    { "load",     "Load aliases and filesystem from disk",          cmd_load     },
+    { "savelist", "View/edit what gets saved  -  savelist [add|remove] <category>", cmd_savelist },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -974,4 +976,97 @@ void alias_set_count(int n) { alias_count = n; }
 void alias_set_table(const void *src, uint32_t len) {
     uint32_t max = (uint32_t)sizeof(alias_table);
     memcpy(alias_table, src, len < max ? len : max);
+}
+
+/* ---- savelist command ---- */
+
+static void cmd_savelist(const char *args) {
+    /* Bare "savelist" or "savelist show" — print current list. */
+    if (!args || !*args || (args[0] == 's' && args[1] == 'h')) {
+        uint32_t sl = persist_savelist_get();
+        kprint_color("Save list: ", LCYAN, BLACK);
+        int any = 0;
+        for (int i = 0; i < SAVELIST_COUNT; i++) {
+            if (sl & (1u << i)) {
+                kprint(savelist_names[i]);
+                kprint(" ");
+                any = 1;
+            }
+        }
+        if (!any) kprint_color("(empty)", LRED, BLACK);
+        kprint("\n");
+        return;
+    }
+
+    /* Parse subcommand: "add" or "remove" */
+    int adding = -1;
+    if (args[0] == 'a' && args[1] == 'd' && args[2] == 'd') {
+        adding = 1;
+    } else if (args[0] == 'r' && args[1] == 'e' && args[2] == 'm') {
+        adding = 0;
+    } else {
+        kprint("Usage: savelist\n");
+        kprint("       savelist add <category>\n");
+        kprint("       savelist remove <category>\n");
+        kprint("Categories: ");
+        for (int i = 0; i < SAVELIST_COUNT; i++) {
+            kprint(savelist_names[i]);
+            kprint(" ");
+        }
+        kprint("\n");
+        return;
+    }
+
+    /* Skip the subcommand word, then any trailing spaces. */
+    while (*args && *args != ' ') args++;
+    while (*args == ' ') args++;
+
+    if (!*args) {
+        kprint_color("Error: missing category name.\n", LRED, BLACK);
+        return;
+    }
+
+    /* Find which category matches */
+    int found = -1;
+    for (int i = 0; i < SAVELIST_COUNT; i++) {
+        const char *n = savelist_names[i];
+        int j = 0;
+        while (n[j] && args[j] == n[j]) j++;
+        if (!n[j] && (!args[j] || args[j] == ' ')) { found = i; break; }
+    }
+
+    if (found < 0) {
+        kprint_color("Unknown category: ", LRED, BLACK);
+        kprint(args);
+        kprint(".  Available: ");
+        for (int i = 0; i < SAVELIST_COUNT; i++) {
+            kprint(savelist_names[i]);
+            kprint(" ");
+        }
+        kprint("\n");
+        return;
+    }
+
+    uint32_t bit = 1u << found;
+    uint32_t sl  = persist_savelist_get();
+
+    if (adding) {
+        if (sl & bit) {
+            kprint(savelist_names[found]);
+            kprint(" is already in the save list.\n");
+            return;
+        }
+        persist_savelist_set(sl | bit);
+        kprint_color(savelist_names[found], LGREEN, BLACK);
+        kprint(" added to save list.\n");
+    } else {
+        if (!(sl & bit)) {
+            kprint(savelist_names[found]);
+            kprint(" is not in the save list.\n");
+            return;
+        }
+        persist_savelist_set(sl & ~bit);
+        kprint_color(savelist_names[found], LRED, BLACK);
+        kprint(" removed from save list.\n");
+    }
 }
