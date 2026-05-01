@@ -47,6 +47,8 @@ v1.4.1 - Implement ALU
 v1.5.1 - Implemented upper and lower commands
 v1.6.1 - Implemented aliases commands
 v2.1.1 - Implement persistence (basic)
+v2.2.1 - Introduce savelist concept
+v2.3.0 - Add matrix command (BETA)
 
 
 ---
@@ -54,7 +56,7 @@ v2.1.1 - Implement persistence (basic)
 
 ## Statistics
 
-**Version:** 2.1.1
+**Version:** 2.3.0
 Current Status: Probably coding
 First Version: 1.0.0
 

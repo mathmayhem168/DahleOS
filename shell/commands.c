@@ -59,6 +59,7 @@ static void cmd_alias (const char *args);   // Maybe will be replaced with somet
 static void cmd_save     (const char *args);
 static void cmd_load     (const char *args);
 static void cmd_savelist (const char *args);
+static void cmd_matrix   (const char *args);
 
 /* ================================================================
    DEFINITIONS  –  definitions for things like aliases
@@ -67,6 +68,10 @@ static void cmd_savelist (const char *args);
 #define ALIAS_NAME_MAX 32   // maximum length for alias name
 #define ALIAS_VAL_MAX 128   // maximum length for the alias's value or what it expands to
 
+// matrix
+#define MATRIX_MAX_DIM 4
+#define MATRIX_VAR_MAX 8    // how many variables can be stored at once
+#define MATRIX_NAME_MAX 16  // max length of a variable name (example: "A")
 
 
 
@@ -76,19 +81,37 @@ static void cmd_savelist (const char *args);
    STRUCTURES - use for helpers or commands
    ================================================================ */
 
+// alias
 typedef struct {
     char name[ALIAS_NAME_MAX];
     char value[ALIAS_VAL_MAX];
 } alias_t;
+
+// matrix
+typedef struct {
+    int rows;
+    int cols;
+    int data[MATRIX_MAX_DIM][MATRIX_MAX_DIM];
+} matrix_t;
+
+typedef struct {
+    char name[MATRIX_NAME_MAX];
+    matrix_t mat;   // matrix stored
+} matrix_var_t;
+
 
 
 /* ================================================================
    DATA - use for helpers only like an alias list
    ================================================================ */
 
+// alias
 static alias_t alias_table[ALIAS_MAX];
 static int alias_count = 0;
 
+// matrix
+static matrix_var_t matrix_vars[MATRIX_VAR_MAX];
+static int matrix_var_count = 0;
 
 
 
@@ -127,6 +150,7 @@ cmd_t cmd_table[] = {
     { "save",     "Save everything in the save list to disk",       cmd_save     },
     { "load",     "Load aliases and filesystem from disk",          cmd_load     },
     { "savelist", "View/edit what gets saved  -  savelist [add|remove] <category>", cmd_savelist },
+    { "matrix", "Perform calculations to a matrix - matrix <dimensions> <matrix> <calculation>", cmd_matrix },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -1069,4 +1093,274 @@ static void cmd_savelist(const char *args) {
         kprint_color(savelist_names[found], LRED, BLACK);
         kprint(" removed from save list.\n");
     }
+}
+
+// Variable lookup
+static matrix_var_t *matrix_find_var(const char *name) {
+    for (int i = 0; i < matrix_var_count; i++) {
+        if (strcmp(matrix_vars[i].name, name) == 0) {
+            return &matrix_vars[i];
+        }
+    }
+    return (void *)0;
+}
+
+// Inline parser
+static const char *matrix_parse_inline(const char *args, matrix_t *m) {
+    if (!args || !*args) {
+        return (void *)0;
+    }
+
+    char tok[12] = {0};
+    int i = 0, j = 0;
+
+    while (args[i] && args[i] != ' ' && i < 11) { tok[i] = args[i]; i++; }
+    while (args[i] == ' ') i++;
+
+    int dim = str_to_int(tok);
+    if (dim < 1 || dim > MATRIX_MAX_DIM) {
+        return (void *)0;
+    }
+
+    m->rows = m->cols = dim;    // currently square matrices only
+
+    int total = dim * dim;
+    for (int e = 0; e < total; e++) {
+        char etok[12] = {0};
+        j = 0;
+        while (args[i] && args[i] != ' ' && j < 11) { etok[j++] = args[i++]; }
+        while (args[i] == ' ') i++;
+        if (!etok[0]) return (void *)0;
+        m->data[e / dim][e % dim] = str_to_int(etok);
+    }
+
+    return args + i;
+}
+
+static int matrix_det(const matrix_t *m) {
+    /* --- Base cases --- */
+    if (m->rows == 1)
+        return m->data[0][0];
+
+    if (m->rows == 2)
+        return m->data[0][0] * m->data[1][1]
+             - m->data[0][1] * m->data[1][0];
+
+    int n   = m->rows;
+    int det = 0;
+
+    for (int j = 0; j < n; j++) {
+        matrix_t minor;
+        minor.rows = minor.cols = n - 1;
+        memset(minor.data, 0, sizeof(minor.data));
+
+        for (int r = 1; r < n; r++) {
+            int mc = 0;                        
+            for (int c = 0; c < n; c++) {
+                if (c == j) continue;          
+                minor.data[r - 1][mc++] = m->data[r][c];
+            }
+        }
+
+        int sign = (j % 2 == 0) ? 1 : -1;
+        det += sign * m->data[0][j] * matrix_det(&minor);
+    }
+
+    return det;
+}
+
+/* Print a matrix to the shell in a simple bracketed grid. */
+static void matrix_print(const matrix_t *m) {
+    for (int r = 0; r < m->rows; r++) {
+        kprint("  [ ");
+        for (int c = 0; c < m->cols; c++) {
+            kprint_int(m->data[r][c]);
+            kprint(" ");
+        }
+        kprint("]\n");
+    }
+}
+
+/*
+ * Apply a named operation to matrix `m` and print the result.
+ * Adding a new operation is just adding a new `if` block here.
+ */
+static void matrix_do_op(const matrix_t *m, const char *op) {
+    if (strcmp(op, "det") == 0) {
+        if (m->rows != m->cols) {
+            kprint_color("Error: determinant requires a square matrix.\n", LRED, BLACK);
+            return;
+        }
+        kprint("det = ");
+        kprint_color_int(matrix_det(m), LGREEN, BLACK);
+        kprint("\n");
+        return;
+    }
+
+    /* TODO: add more operations here, e.g.:
+         "print"     — just display the matrix
+         "transpose" — swap rows/cols (print result)
+         "trace"     — sum of the main diagonal
+    */
+
+    kprint_color("Unknown operation '", LRED, BLACK);
+    kprint(op);
+    kprint("'. Available: det\n");
+}
+
+// matrix
+static void cmd_matrix(const char *args) {
+    if (!args || !*args) {
+        kprint("Usage:\n");
+        kprint("  matrix <dim> <elements...> <op>         inline\n");
+        kprint("  matrix matrix:<name> <op>               use stored variable\n");
+        kprint("  matrix store <name> <dim> <elements...> save variable\n");
+        kprint("  matrix list                             show all variables\n");
+        kprint("Operations: det\n");
+        kprint("Example: matrix 2 1 2 3 4 det\n");
+        return;
+    }
+
+    /* Read first token into tok; rest points past it */
+    char tok[32] = {0};
+    int i = 0;
+    while (args[i] && args[i] != ' ' && i < 31) { tok[i] = args[i]; i++; }
+    while (args[i] == ' ') i++;
+    const char *rest = args + i;
+
+    /* ----------------------------------------------------------------
+       Branch 1: list stored variables
+       Command: matrix list
+       ---------------------------------------------------------------- */
+    if (strcmp(tok, "list") == 0) {
+        if (matrix_var_count == 0) {
+            kprint("No matrix variables stored.\n");
+            return;
+        }
+        for (int v = 0; v < matrix_var_count; v++) {
+            kprint_color(matrix_vars[v].name, LGREEN, BLACK);
+            kprint(" (");
+            kprint_int(matrix_vars[v].mat.rows);
+            kprint("x");
+            kprint_int(matrix_vars[v].mat.cols);
+            kprint("):\n");
+            matrix_print(&matrix_vars[v].mat);
+        }
+        return;
+    }
+
+    /* ----------------------------------------------------------------
+       Branch 2: store a matrix as a named variable
+       Command: matrix store A 2 1 2 3 4
+                              ^-name
+                                ^---------inline data (no op token)
+       Internally keyed as "matrix;A" (your naming convention for
+       stored keys), though the in-RAM name field just stores "A".
+       ---------------------------------------------------------------- */
+    if (strcmp(tok, "store") == 0) {
+        if (!rest || !*rest) {
+            kprint("Usage: matrix store <name> <dim> <elements...>\n");
+            return;
+        }
+
+        /* Parse variable name */
+        char name[MATRIX_NAME_MAX] = {0};
+        int j = 0;
+        while (rest[j] && rest[j] != ' ' && j < MATRIX_NAME_MAX - 1) {
+            name[j] = rest[j]; j++;
+        }
+        while (rest[j] == ' ') j++;
+
+        if (!name[0]) {
+            kprint_color("Error: missing variable name.\n", LRED, BLACK);
+            return;
+        }
+
+        /* Parse the matrix data — no op token follows, so leftover will be "" */
+        matrix_t m;
+        memset(&m, 0, sizeof(m));
+        const char *leftover = matrix_parse_inline(rest + j, &m);
+        if (!leftover) {
+            kprint_color("Error: invalid matrix data.\n", LRED, BLACK);
+            kprint("Usage: matrix store <name> <dim> <elements...>\n");
+            return;
+        }
+
+        /* Overwrite existing variable or add new one */
+        matrix_var_t *v = matrix_find_var(name);
+        if (!v) {
+            if (matrix_var_count >= MATRIX_VAR_MAX) {
+                kprint_color("Error: variable table full (max ", LRED, BLACK);
+                kprint_int(MATRIX_VAR_MAX);
+                kprint(").\n");
+                return;
+            }
+            v = &matrix_vars[matrix_var_count++];
+            strncpy(v->name, name, MATRIX_NAME_MAX - 1);
+        }
+        v->mat = m;
+
+        kprint_color("Stored as '", LGREEN, BLACK);
+        kprint(name);
+        kprint("'.\n");
+        return;
+    }
+
+    /* ----------------------------------------------------------------
+       Branch 3: variable reference  — matrix:A det
+       tok = "matrix:A"  →  var name starts at tok+7
+       rest = "det"
+       ---------------------------------------------------------------- */
+    if (tok[0]=='m' && tok[1]=='a' && tok[2]=='t' && tok[3]=='r' &&
+        tok[4]=='i' && tok[5]=='x' && tok[6]==':') {
+
+        const char *var_name = tok + 7;
+        if (!*var_name) {
+            kprint_color("Error: missing variable name after 'matrix:'.\n", LRED, BLACK);
+            return;
+        }
+
+        matrix_var_t *v = matrix_find_var(var_name);
+        if (!v) {
+            kprint_color("Error: no matrix variable named '", LRED, BLACK);
+            kprint(var_name);
+            kprint("'.\n");
+            return;
+        }
+
+        /* rest is now the operation string */
+        if (!rest || !*rest) {
+            kprint("Error: missing operation. Available: det\n");
+            return;
+        }
+        matrix_print(&v->mat);
+        matrix_do_op(&v->mat, rest);
+        return;
+    }
+
+    /* ----------------------------------------------------------------
+       Branch 4: inline matrix  —  2 1 2 3 4 det
+       tok = "2" (the dimension, already peeked but not consumed yet)
+       We re-parse from the original args so matrix_parse_inline gets
+       the full "2 1 2 3 4 det" string.
+       ---------------------------------------------------------------- */
+    matrix_t m;
+    memset(&m, 0, sizeof(m));
+    const char *op_ptr = matrix_parse_inline(args, &m);
+
+    if (!op_ptr) {
+        kprint_color("Error: could not parse matrix.\n", LRED, BLACK);
+        kprint("Usage: matrix <dim> <elements...> <op>\n");
+        kprint("Example: matrix 2 1 2 3 4 det\n");
+        return;
+    }
+    while (*op_ptr == ' ') op_ptr++;    /* trim any leftover spaces */
+
+    if (!*op_ptr) {
+        kprint_color("Error: missing operation.\n", LRED, BLACK);
+        return;
+    }
+
+    matrix_print(&m);
+    matrix_do_op(&m, op_ptr);
 }
