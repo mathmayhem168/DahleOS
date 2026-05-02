@@ -1,9 +1,10 @@
 # ── Compiled object files ──────────────────────────────
 *.o
 
-# ── Kernel binary and ISO ──────────────────────────────
+# ── Kernel binary, ISO, and disk image ─────────────────
 os.bin
 dahleos.iso
+disk.img
 
 # ── ISO staging directory ──────────────────────────────
 iso/
