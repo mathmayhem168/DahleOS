@@ -52,6 +52,7 @@ static void cmd_cd    (const char *args);
 static void cmd_cat   (const char *args);
 /* computing commands */
 static void cmd_alu  (const char *args);
+static void cmd_boolean (const char *args);
 /* modifying commands */
 static void cmd_upper (const char *args);
 static void cmd_lower (const char *args);
@@ -151,6 +152,7 @@ cmd_t cmd_table[] = {
     { "load",     "Load aliases and filesystem from disk",          cmd_load     },
     { "savelist", "View/edit what gets saved  -  savelist [add|remove] <category>", cmd_savelist },
     { "matrix", "Perform calculations to a matrix - matrix <dimensions> <matrix> <calculation>", cmd_matrix },
+    { "boolean", "Perform basic boolean algebra commands - boolean <first> <second> <op>", cmd_boolean },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -1364,3 +1366,84 @@ static void cmd_matrix(const char *args) {
     matrix_print(&m);
     matrix_do_op(&m, op_ptr);
 }
+
+// Returns -1 if invalid, 0 or 1 if valid
+static int parse_bool(const char *token) {
+    if (!token) return -1;
+    if (token[0] == '1' && token[1] == '\0') return 1;
+    if (token[0] == '0' && token[1] == '\0') return 0;
+    if (strcmp(token, "true")  == 0) return 1;
+    if (strcmp(token, "false") == 0) return 0;
+    return -1;
+}
+
+static void cmd_boolean(const char *args) {
+    if (!args || !*args) {
+        kprint("Usage:\n");
+        kprint(" boolean <first> <second> <op>\n");
+        kprint("Operations: and, or, not (first is computed only), xor, nand, nor\n");
+        kprint("Example: boolean 1 0 and\n");
+        return;
+    }
+
+    char buf[64];
+    strncpy(buf, args, sizeof(buf) - 1);
+    buf[63] = '\0';
+
+    // Tokenize: split on spaces
+    char *tok[3] = {0, 0, 0};
+    int count = 0;
+
+    char *p = buf;
+    while (*p && count < 3) {
+        // Skip spaces
+        while (*p == ' ') p++;
+        if (!*p) break;
+
+        tok[count++] = p;
+
+        // Advance to next space
+        while (*p && *p != ' ') p++;
+        if (*p == ' ') *p++ = '\0';  // null-terminate the token
+    }
+
+    // Special case: "boolean 1 not" (unary)
+    if (count == 2 && strcmp(tok[1], "not") == 0) {
+        int a = parse_bool(tok[0]);
+        if (a == -1) { kprint("Error: invalid boolean value\n"); return; }
+        kprint_int(!a);
+        kprint("\n");
+        return;
+    }
+
+    // Normal case: needs all 3 tokens
+    if (count < 3) {
+        kprint("Error: expected <first> <second> <op>\n");
+        return;
+    }
+
+    int a = parse_bool(tok[0]);
+    int b = parse_bool(tok[1]);
+    const char *op = tok[2];
+
+    if (a == -1) { kprint("Error: invalid first value\n");  return; }
+    if (b == -1) { kprint("Error: invalid second value\n"); return; }
+
+    int result;
+    if      (strcmp(op, "and")  == 0) result = a & b;
+    else if (strcmp(op, "or")   == 0) result = a | b;
+    else if (strcmp(op, "xor")  == 0) result = a ^ b;
+    else if (strcmp(op, "nand") == 0) result = !(a & b);
+    else if (strcmp(op, "nor")  == 0) result = !(a | b);
+    else {
+        kprint("Error: unknown operation '");
+        kprint(op);
+        kprint("'\n");
+        return;
+    }
+
+    kprint_int(result);
+    kprint("\n");
+    
+}
+
