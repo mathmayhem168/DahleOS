@@ -15,6 +15,7 @@
 
 #include "commands.h"
 #include "shell.h"
+#include "graphics_parse.h"
 #include "../drivers/screen.h"
 #include "../drivers/gui.h"
 #include "../drivers/port.h"
@@ -61,6 +62,7 @@ static void cmd_save     (const char *args);
 static void cmd_load     (const char *args);
 static void cmd_savelist (const char *args);
 static void cmd_matrix   (const char *args);
+static void cmd_graphics (const char *args);
 
 /* ================================================================
    DEFINITIONS  –  definitions for things like aliases
@@ -152,7 +154,8 @@ cmd_t cmd_table[] = {
     { "load",     "Load aliases and filesystem from disk",          cmd_load     },
     { "savelist", "View/edit what gets saved  -  savelist [add|remove] <category>", cmd_savelist },
     { "matrix", "Perform calculations to a matrix - matrix <dimensions> <matrix> <calculation>", cmd_matrix },
-    { "boolean", "Perform basic boolean algebra commands - boolean <first> <second> <op>", cmd_boolean },
+    { "boolean",  "Perform basic boolean algebra commands - boolean <first> <second> <op>", cmd_boolean  },
+    { "graphics", "Control display mode  -  graphics <status|set vbe|set vga|test>",       cmd_graphics },
 };
 
 int cmd_count = (int)(sizeof(cmd_table) / sizeof(cmd_t));
@@ -334,7 +337,8 @@ static void cmd_scp(const char *args) {
 
 #define LINE_GAP      4u
 
-/* ── Desktop layout (three windows, centred on 800-px screen) ── */
+/* ── Desktop layout — calibrated for VBE 800×600 ───────────── */
+/* Window dimensions */
 #define SYSINFO_W    300u
 #define SYSINFO_H    185u
 #define WELCOME_W    240u
@@ -344,16 +348,19 @@ static void cmd_scp(const char *args) {
 #define WIN_TOP       70u
 #define WIN_GAP       20u
 
-/*  Total content = 300+240+160 = 700,  gaps = 40,  sum = 740
- *  SYSINFO_X  = (800-740)/2 = 30
- *  WELCOME_X  = 30+300+20   = 350
- *  CONTROLS_X = 350+240+20  = 610                              */
+/* Horizontal positions:
+ *   total content = 300+240+160 = 700,  gaps = 2×20 = 40  → sum = 740
+ *   SYSINFO_X  = (800-740)/2 = 30
+ *   WELCOME_X  = 30+300+20   = 350
+ *   CONTROLS_X = 350+240+20  = 610                                     */
 #define SYSINFO_X    30u
 #define WELCOME_X    350u
 #define CONTROLS_X   610u
 
-/* Hint bar: centred at the very bottom, just above the status bar */
-#define HINT_Y       544u
+/* Hint bar: one character row above the status bar, with a small gap.
+ *   screen_px_h() = 600, GUI_SB_H = 20, screen_char_h() = 16
+ *   600 - 20 - 16 - 20 = 544                                          */
+#define HINT_GAP     20u
 
 /* Window-movement step (pixels per arrow-key press) */
 #define MOVE_STEP    8u
@@ -445,11 +452,14 @@ static void dahle_controls_window(uint32_t x, uint32_t y, int focused) {
    Repaints the entire scene from scratch.  Called after every
    input event so the display always reflects current state.   */
 static void dahle_redraw(void) {
+    /* Hint bar sits one character height above the status bar */
+    uint32_t hint_y = screen_px_h() - GUI_SB_H - screen_char_h() - HINT_GAP;
+
     dahle_draw_desktop();
     dahle_sysinfo_window (wpos_x[0], wpos_y[0], wfocus == 0);
     dahle_welcome_window (wpos_x[1], wpos_y[1], wfocus == 1);
     dahle_controls_window(wpos_x[2], wpos_y[2], wfocus == 2);
-    gui_label_centered(0u, HINT_Y, 800u,
+    gui_label_centered(0u, hint_y, screen_px_w(),
         "Tab  next window  |  Arrows  move  |  ESC  exit  |  Shift+ESC  apps",
         GC_TEXT_DIM, TRANSPARENT);
 }
@@ -459,7 +469,11 @@ static void dahle_redraw(void) {
    on keyboard_getchar() until the user dismisses them.        */
 
 static void dahle_modal_scrim(void) {
-    screen_fill_rect(0u, 0u, 800u, 580u, RGB(6, 9, 14));
+    /* Cover the entire area above the status bar */
+    screen_fill_rect(0u, 0u,
+                     screen_px_w(),
+                     screen_px_h() - GUI_SB_H,
+                     RGB(6, 9, 14));
 }
 
 /* App: System Monitor */
@@ -497,7 +511,7 @@ static void dahle_app_sysmon(void) {
     uint32_t badge_y = AY + GUI_TITLE_H + 2u + 7u * (screen_char_h() + LINE_GAP);
     gui_badge(AX + GUI_PAD, badge_y, "ONLINE", GC_WIN_BG, GC_SUCCESS);
 
-    gui_label_centered(0u, AY + AH + 14u, 800u,
+    gui_label_centered(0u, AY + AH + 14u, screen_px_w(),
                        "Press any key to close...", GC_TEXT_DIM, TRANSPARENT);
     keyboard_getchar();
 }
@@ -519,7 +533,7 @@ static void dahle_app_about(void) {
     dahle_wtext(AX, AY, 4, "Display:  VESA 800x600x32 bpp", GC_TEXT_DIM);
     dahle_wtext(AX, AY, 5, "Runtime:  QEMU i386", GC_TEXT_DIM);
 
-    gui_label_centered(0u, AY + AH + 14u, 800u,
+    gui_label_centered(0u, AY + AH + 14u, screen_px_w(),
                        "Press any key to close...", GC_TEXT_DIM, TRANSPARENT);
     keyboard_getchar();
 }
@@ -556,6 +570,9 @@ static void dahle_launcher(void) {
    ─────────────────────────────────────────────────────────── */
 static void cmd_dahle(const char *args) {
     (void)args;
+
+    /* Switch from VGA text mode to VBE 800×600×32 framebuffer */
+    screen_enter_vbe();
 
     /* Initialise window positions to the centred default layout */
     wpos_x[0] = SYSINFO_X;  wpos_y[0] = WIN_TOP;
@@ -597,12 +614,11 @@ static void cmd_dahle(const char *args) {
         dahle_redraw();
     }
 
-    /* Restore text-mode shell */
-    screen_set_color(WHITE, GUI_DESKTOP);
-    screen_clear();
-    kprint_color("\n  " OS_NAME "  v" OS_VERSION "\n", LGREEN, GUI_DESKTOP);
-    kprint_color("  ----------------\n\n", GUI_BORDER, GUI_DESKTOP);
-    kprint_color("  All systems nominal.\n\n", GREEN, GUI_DESKTOP);
+    /* Switch back to VGA hardware text mode and redraw the shell header */
+    screen_enter_vga();
+    kprint_color("\n  " OS_NAME "  v" OS_VERSION "\n", LGREEN, BLACK);
+    kprint_color("  ----------------\n\n", LGREY, BLACK);
+    kprint_color("  All systems nominal.\n\n", GREEN, BLACK);
 }
 
 
@@ -618,7 +634,7 @@ static void cmd_kernelpanic(const char *args) {
     screen_noise(timer_ticks() + 1u);
 
     /* Phase 2: hold glitch for ~1 second (100 ticks @ 100 Hz) */
-    uint32_t t0 = timer_ticks();    
+    uint32_t t0 = timer_ticks();
     while (timer_ticks() - t0 < 100);
 
     /* Phase 3: clear to black */
@@ -1157,9 +1173,9 @@ static int matrix_det(const matrix_t *m) {
         memset(minor.data, 0, sizeof(minor.data));
 
         for (int r = 1; r < n; r++) {
-            int mc = 0;                        
+            int mc = 0;
             for (int c = 0; c < n; c++) {
-                if (c == j) continue;          
+                if (c == j) continue;
                 minor.data[r - 1][mc++] = m->data[r][c];
             }
         }
@@ -1377,6 +1393,112 @@ static int parse_bool(const char *token) {
     return -1;
 }
 
+/* ================================================================
+   GRAPHICS  —  query and switch the active display mode
+   ================================================================
+   graphics status      Print the active mode (vga or vbe).
+   graphics set vbe     Switch to VBE 800×600×32 framebuffer.
+   graphics set vga     Switch to VGA hardware text mode (80×25).
+   graphics test        Run built-in integration assertions.
+   ================================================================ */
+
+/* In-kernel integration test helper — runs silently, prints at the end */
+static void graphics_run_tests(void) {
+#define _NTEST 5
+    int       results[_NTEST];
+    const char *names[_NTEST];
+    int n = 0;
+
+#define CHECK(desc, cond) do { names[n] = (desc); results[n++] = (cond) ? 1 : 0; } while (0)
+
+    /* 1. Initial state: shell always runs in VGA text mode */
+    CHECK("initial mode is VGA text",         !screen_is_vbe());
+
+    /* 2–3. Low-level round-trip */
+    screen_enter_vbe();
+    CHECK("screen_enter_vbe() activates VBE",  screen_is_vbe());
+    screen_enter_vga();
+    CHECK("screen_enter_vga() restores VGA",   !screen_is_vbe());
+
+    /* 4–5. Full command-path round-trip */
+    cmd_graphics("set vbe");
+    CHECK("'graphics set vbe' → VBE mode",     screen_is_vbe());
+    cmd_graphics("set vga");
+    CHECK("'graphics set vga' → VGA mode",     !screen_is_vbe());
+
+#undef CHECK
+
+    /* Print all results — we are now in VGA text mode */
+    int passed = 0, failed = 0;
+    kprint_color("\ngraphics integration tests\n", LCYAN, BLACK);
+    kprint_color("──────────────────────────\n", GUI_BORDER, BLACK);
+    for (int i = 0; i < n; i++) {
+        if (results[i]) {
+            kprint_color("  PASS  ", LGREEN, BLACK);
+            passed++;
+        } else {
+            kprint_color("  FAIL  ", LRED, BLACK);
+            failed++;
+        }
+        kprint(names[i]);
+        kprint("\n");
+    }
+    kprint("\n");
+    if (failed == 0) {
+        kprint_color("  All ", LGREEN, BLACK);
+        kprint_int(passed);
+        kprint_color(" tests passed.\n\n", LGREEN, BLACK);
+    } else {
+        kprint_int(passed);
+        kprint(" passed, ");
+        kprint_color_int(failed, LRED, BLACK);
+        kprint_color(" failed.\n\n", LRED, BLACK);
+    }
+#undef _NTEST
+}
+
+static void cmd_graphics(const char *args) {
+    const char *mode_tok = (const char *)0;
+    int action = graphics_parse(args, &mode_tok);
+
+    switch (action) {
+
+    case GFXP_STATUS:
+        kprint("  Mode:  ");
+        kprint_color(screen_is_vbe() ? "vbe" : "vga", LGREEN, BLACK);
+        kprint("\n");
+        break;
+
+    case GFXP_SET_VBE:
+        screen_enter_vbe();
+        kprint_color("  Switched to VBE framebuffer mode (800x600x32).\n", LGREEN, GUI_DESKTOP);
+        break;
+
+    case GFXP_SET_VGA:
+        screen_enter_vga();
+        kprint_color("  Switched to VGA text mode (80x25).\n", LGREEN, BLACK);
+        break;
+
+    case GFXP_SET_UNKNOWN:
+        kprint_color("  Unknown mode: '", LRED, BLACK);
+        kprint(mode_tok ? mode_tok : "");
+        kprint_color("'  (use vbe or vga)\n", LRED, BLACK);
+        break;
+
+    case GFXP_TEST:
+        graphics_run_tests();
+        break;
+
+    default:
+        kprint("Usage:\n");
+        kprint("  graphics status\n");
+        kprint("  graphics set vbe\n");
+        kprint("  graphics set vga\n");
+        kprint("  graphics test\n");
+        break;
+    }
+}
+
 static void cmd_boolean(const char *args) {
     if (!args || !*args) {
         kprint("Usage:\n");
@@ -1444,6 +1566,5 @@ static void cmd_boolean(const char *args) {
 
     kprint_int(result);
     kprint("\n");
-    
-}
 
+}

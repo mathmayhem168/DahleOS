@@ -45,6 +45,16 @@ void screen_init(void *fb_addr, uint32_t pitch,
                  uint32_t width, uint32_t height, uint32_t bpp);
 
 /* =============================================================
+   Video-mode switching
+   screen_enter_vbe : re-enable VBE 800×600×32 and switch the
+                      text API to framebuffer rendering.
+   screen_enter_vga : disable VBE and switch the text API to the
+                      VGA hardware text buffer (0xB8000, 80×25).
+   ============================================================= */
+void screen_enter_vbe(void);
+void screen_enter_vga(void);
+
+/* =============================================================
    Text API  (cursor-based, wraps and scrolls automatically)
    ============================================================= */
 void screen_clear(void);
@@ -91,5 +101,8 @@ uint32_t screen_char_w(void);   /* character cell width  in pixels (8)  */
 uint32_t screen_char_h(void);   /* character cell height in pixels (16) */
 uint32_t screen_px_w(void);     /* framebuffer width  in pixels         */
 uint32_t screen_px_h(void);     /* framebuffer height in pixels         */
+
+/* Mode query */
+int screen_is_vbe(void);   /* 1 if currently in VBE framebuffer mode, 0 if VGA text */
 
 #endif

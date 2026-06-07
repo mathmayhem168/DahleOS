@@ -10,6 +10,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 > Changes on `main` not yet tagged as a release go here.
 
+## [v0.2.4] - 2026-05-07
+### Added
+- `boolean` command: basic boolean algebra calculator
+
 ---
 
 ## [v0.2.3] — 2026-05-01

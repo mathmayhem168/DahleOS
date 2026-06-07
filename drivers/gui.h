@@ -72,10 +72,43 @@ void gui_statusbar(const char *left_text, const char *right_text);
 void gui_badge(uint32_t x, uint32_t y,
                const char *text, uint32_t fg, uint32_t bg);
 
+/* ── New controls ───────────────────────────────────────────── */
+
+/* Horizontal progress bar.
+   pct  = fill percentage, 0–100.
+   color = fill colour (e.g. GC_SUCCESS, GC_ACCENT, GC_DANGER). */
+void gui_progress_bar(uint32_t x, uint32_t y, uint32_t w,
+                      uint32_t pct, uint32_t color);
+
+/* Checkbox — 14×14 square indicator with an optional text label to its right.
+   checked = 0 (empty) or non-zero (filled). */
+void gui_checkbox(uint32_t x, uint32_t y, const char *label, int checked);
+
+/* On/off toggle switch (34×14 px pill-shaped track with a sliding knob).
+   on = 0 (off, grey track) or non-zero (on, green track). */
+void gui_toggle(uint32_t x, uint32_t y, int on);
+
+/* Single-line text input field.
+   text    = current buffer contents (may be empty string, never NULL).
+   focused = non-zero to draw a cyan accent border and a cursor after the text. */
+void gui_input_field(uint32_t x, uint32_t y, uint32_t w,
+                     const char *text, int focused);
+
 /* Height of the window title bar in pixels (useful for content placement). */
-#define GUI_TITLE_H  22u
+#define GUI_TITLE_H     22u
 
 /* Padding inside a window content area. */
-#define GUI_PAD      10u
+#define GUI_PAD         10u
+
+/* Height of the status bar in pixels.
+   Exposed here so callers can compute safe drawing areas without
+   hard-coding the literal 20 outside this file. */
+#define GUI_SB_H        20u
+
+/* Fixed heights of the new controls (px) — use these when computing layouts. */
+#define GUI_PROGRESS_H  14u   /* gui_progress_bar  */
+#define GUI_CHECK_SZ    14u   /* gui_checkbox box side length */
+#define GUI_TOGGLE_W    34u   /* gui_toggle width  */
+#define GUI_TOGGLE_H    14u   /* gui_toggle height */
 
 #endif

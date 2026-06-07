@@ -9,13 +9,26 @@
                 screen_fill_rounded_rect, screen_draw_char_px …
                 draw anything at any pixel coordinate.
                 Used by drivers/gui.c for the widget layer.
+
+   Mode switching:
+                screen_enter_vbe() / screen_enter_vga() toggle
+                between VBE framebuffer rendering and the VGA
+                hardware text buffer (0xB8000).  All kprint*
+                calls are automatically routed to the active
+                backend so callers need no mode awareness.
    ============================================================= */
 
 #include "screen.h"
 #include "font.h"
+#include "vbe.h"
+#include "vga_text.h"
 #include "../libc/string.h"
 
-/* ── Framebuffer state ──────────────────────────────────────── */
+/* ── Active display mode ────────────────────────────────────── */
+typedef enum { SCREEN_VBE = 0, SCREEN_VGA_TEXT = 1 } screen_mode_t;
+static screen_mode_t mode = SCREEN_VBE;
+
+/* ── Framebuffer state (VBE mode only) ──────────────────────── */
 static volatile uint8_t *fb;
 static uint32_t fb_pitch;
 static uint32_t fb_w, fb_h;
@@ -142,8 +155,9 @@ uint32_t screen_char_w(void) { return CW; }
 uint32_t screen_char_h(void) { return CH; }
 uint32_t screen_px_w(void)   { return fb_w; }
 uint32_t screen_px_h(void)   { return fb_h; }
+int      screen_is_vbe(void) { return mode == SCREEN_VBE; }
 
-/* ── Text-layer internals ───────────────────────────────────── */
+/* ── Text-layer internals (VBE mode) ────────────────────────── */
 
 static uint32_t tcols(void) { return fb_w / CW; }
 static uint32_t trows(void) { return fb_h / CH; }
@@ -173,6 +187,7 @@ void screen_init(void *fb_addr, uint32_t pitch,
 }
 
 void screen_clear(void) {
+    if (mode == SCREEN_VGA_TEXT) { vga_text_clear(); return; }
     screen_fill_rect(0, 0, fb_w, fb_h, cur_bg);
     cur_col = cur_row = 0;
 }
@@ -180,9 +195,13 @@ void screen_clear(void) {
 void screen_set_color(uint32_t fg, uint32_t bg) {
     cur_fg = fg;
     cur_bg = bg;
+    if (mode == SCREEN_VGA_TEXT)
+        vga_text_set_attr(vga_text_rgb_to_attr(fg, bg));
 }
 
 void kprint_char(char c) {
+    if (mode == SCREEN_VGA_TEXT) { vga_text_putchar(c); return; }
+
     uint32_t cols = tcols(), rows = trows();
     switch (c) {
     case '\n': cur_col = 0; cur_row++; break;
@@ -202,6 +221,13 @@ void kprint_char(char c) {
 void kprint(const char *s) { while (*s) kprint_char(*s++); }
 
 void kprint_color(const char *s, uint32_t fg, uint32_t bg) {
+    if (mode == SCREEN_VGA_TEXT) {
+        uint8_t saved = vga_text_rgb_to_attr(cur_fg, cur_bg);
+        vga_text_set_attr(vga_text_rgb_to_attr(fg, bg));
+        vga_text_print(s);
+        vga_text_set_attr(saved);
+        return;
+    }
     uint32_t of = cur_fg, ob = cur_bg;
     cur_fg = fg; cur_bg = bg;
     kprint(s);
@@ -221,6 +247,8 @@ void kprint_hex(uint32_t n) {
 }
 
 void screen_backspace(void) {
+    if (mode == SCREEN_VGA_TEXT) { vga_text_backspace(); return; }
+
     if (cur_col > 0) {
         cur_col--;
     } else if (cur_row > 0) {
@@ -228,4 +256,31 @@ void screen_backspace(void) {
         cur_col = tcols() - 1u;
     }
     screen_fill_rect(cur_col * CW, cur_row * CH, CW, CH, cur_bg);
+}
+
+/* ── Video-mode switching ───────────────────────────────────── */
+
+void screen_enter_vbe(void) {
+    uint32_t fb_addr = vbe_framebuffer();
+    if (fb_addr == 0) return;   /* no Bochs VBE card found at boot */
+    /* Save the VGA font before VBE pixel writes overwrite plane 2.
+       (800×600×32 bpp covers all 256 KB of VRAM, including the font plane.) */
+    vga_text_save_font();
+    vbe_enable();
+    mode = SCREEN_VBE;          /* must precede screen_init → screen_clear */
+    screen_init((void *)fb_addr, vbe_pitch(), 800u, 600u, 32u);
+}
+
+void screen_enter_vga(void) {
+    /* Only call vbe_disable() if VBE was actually initialised at boot. */
+    if (vbe_framebuffer() != 0)
+        vbe_disable();
+    /* Restore the font and sequencer/GC register state that VBE corrupted.
+       Must happen before vga_text_init() writes to 0xB8000. */
+    vga_text_restore_font();
+    /* Always switch to VGA text mode regardless of VBE availability. */
+    mode = SCREEN_VGA_TEXT;
+    cur_fg = WHITE;
+    cur_bg = BLACK;
+    vga_text_init();
 }

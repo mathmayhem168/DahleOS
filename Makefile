@@ -30,6 +30,8 @@ C_SRC := \
     cpu/timer.c         \
     drivers/port.c      \
     drivers/ata.c       \
+    drivers/vbe.c       \
+    drivers/vga_text.c  \
     drivers/screen.c    \
     drivers/gui.c       \
     drivers/font.c      \
@@ -55,7 +57,7 @@ ASM_OBJS := $(ASM_SRC:.asm=_s.o)
 OBJS     := $(ASM_OBJS) $(C_OBJS)
 
 # ---- rules --------------------------------------------------
-.PHONY: all run iso clean
+.PHONY: all run iso clean test
 
 all: os.bin
 	@echo ""
@@ -87,6 +89,11 @@ iso: os.bin
 	grub-mkrescue -o dahleos.iso iso
 	@echo "ISO → dahleos.iso"
 
+test:
+	cc -std=c99 -Wall -Wextra -Werror -o tests/test_graphics tests/test_graphics.c
+	./tests/test_graphics
+
 clean:
 	rm -f $(OBJS) os.bin dahleos.iso disk.img
 	rm -rf iso
+	rm -f tests/test_graphics
