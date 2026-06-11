@@ -614,8 +614,11 @@ static void cmd_dahle(const char *args) {
         dahle_redraw();
     }
 
-    /* Switch back to VGA hardware text mode and redraw the shell header */
-    screen_enter_vga();
+    /* Stay in VBE mode — switching back to VGA text mode causes a freeze
+       because vbe_disable() leaves 0xA0000 in an undefined state.
+       Just clear the framebuffer and let the shell continue in VBE. */
+    screen_set_color(WHITE, BLACK);
+    screen_clear();
     kprint_color("\n  " OS_NAME "  v" OS_VERSION "\n", LGREEN, BLACK);
     kprint_color("  ----------------\n\n", LGREY, BLACK);
     kprint_color("  All systems nominal.\n\n", GREEN, BLACK);

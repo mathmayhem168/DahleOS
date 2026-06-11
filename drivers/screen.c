@@ -263,22 +263,20 @@ void screen_backspace(void) {
 void screen_enter_vbe(void) {
     uint32_t fb_addr = vbe_framebuffer();
     if (fb_addr == 0) return;   /* no Bochs VBE card found at boot */
-    /* Save the VGA font before VBE pixel writes overwrite plane 2.
-       (800×600×32 bpp covers all 256 KB of VRAM, including the font plane.) */
-    vga_text_save_font();
     vbe_enable();
     mode = SCREEN_VBE;          /* must precede screen_init → screen_clear */
     screen_init((void *)fb_addr, vbe_pitch(), 800u, 600u, 32u);
 }
 
 void screen_enter_vga(void) {
-    /* Only call vbe_disable() if VBE was actually initialised at boot. */
-    if (vbe_framebuffer() != 0)
+    if (vbe_framebuffer() != 0) {
+        /* Reload the font into VGA plane 2 BEFORE disabling VBE.
+           Writing to 0xA0000 after vbe_disable() crashes because the Bochs
+           VBE card leaves the ISA window in an undefined state during the
+           mode transition.  While VBE is still active the window is stable. */
+        vga_text_load_font();
         vbe_disable();
-    /* Restore the font and sequencer/GC register state that VBE corrupted.
-       Must happen before vga_text_init() writes to 0xB8000. */
-    vga_text_restore_font();
-    /* Always switch to VGA text mode regardless of VBE availability. */
+    }
     mode = SCREEN_VGA_TEXT;
     cur_fg = WHITE;
     cur_bg = BLACK;
