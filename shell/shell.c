@@ -56,11 +56,22 @@ static void run(const char *input) {
     while (*input == ' ') input++;
     if (!*input) return;
 
+    /* D/D/F trapdoor: if a divide-by-zero just armed the trap, this line
+       is checked against the secret correction sentence first. */
+    if (ddf_try_secret(input)) return;
+
     char name[64] = {0};
     int i = 0;
     while (input[i] && input[i] != ' ' && i < 63) { name[i] = input[i]; i++; }
     const char *args = input + i;
     while (*args == ' ') args++;
+
+    /* Hidden dev/debug/fun console — intentionally not in cmd_table,
+       so it never appears in 'help' or tab-completion. */
+    if (strcmp(name, "ddf") == 0) {
+        ddf_command(args);
+        return;
+    }
 
     /* Check built-in command table first */
     for (int c = 0; c < cmd_count; c++) {

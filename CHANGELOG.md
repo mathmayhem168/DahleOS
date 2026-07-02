@@ -10,6 +10,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 > Changes on `main` not yet tagged as a release go here.
 
+## [v0.2.6] - 2026-06-11
+### Fixed
+- `screen` command: screen freezes when switching back to VGA text mode
+
+---
+
+## [v0.2.5] - 2026-06-07
+### Added
+- `graphics` command: switch graphics mode
+
+---
+
 ## [v0.2.4] - 2026-05-07
 ### Added
 - `boolean` command: basic boolean algebra calculator
@@ -18,7 +30,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [v0.2.3] — 2026-05-01
 ### Added
-- `matrix` command (BETA): falling-character animation in the VESA framebuffer
+- `matrix` command: perform operations on matrices
 
 ---
 

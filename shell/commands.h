@@ -15,6 +15,10 @@ extern int    cmd_count;
 /* Alias resolution — returns expanded value or NULL (used by shell.c run()) */
 const char *alias_resolve(const char *name);
 
+/* D/D/F trapdoor (hidden behind `alu`) — used only by shell.c run() */
+int  ddf_try_secret(const char *input);
+void ddf_command(const char *args);
+
 /* Persistence accessors — used only by storage/persist.c */
 int         alias_get_count(void);
 const void *alias_get_table_ptr(void);

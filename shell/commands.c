@@ -814,6 +814,16 @@ static int parse_operand(const char *s, int *out) {
     return 1;
 }
 
+/* ----------------------------------------------------------------
+   D/D/F (Developer/Debug/Fun) trapdoor — hidden behind `alu`.
+   Divide-by-zero arms a one-shot trap; the *next* line typed must be
+   the exact contextual correction sentence, or the trap disarms and
+   the line is handled normally. No password, no visible prompt.
+   ---------------------------------------------------------------- */
+static int ddf_unlocked      = 0;
+static int ddf_waiting_secret = 0;
+static int ddf_last_numerator = 0;
+
 static void cmd_alu(const char *args) {
     if (!args || !*args) {
         kprint("Usage: alu <a> <b> <+|-|*|/>\n");
@@ -852,7 +862,12 @@ static void cmd_alu(const char *args) {
         case '-': result = a - b; break;
         case '*': result = a * b; break;
         case '/':
-            if (b == 0) { kprint_color("Error: division by zero\n", LRED, BLACK); return; }
+            if (b == 0) {
+                kprint_color("Not a number.\n", LRED, BLACK);
+                ddf_last_numerator = a;
+                ddf_waiting_secret = 1;
+                return;
+            }
             result = a / b;
             break;
         default:
@@ -875,6 +890,70 @@ static void cmd_alu(const char *args) {
     kprint(" 0b"); kprint(bb);
     kprint(" = 0b"); kprint_color(br, LGREEN, BLACK);
     kprint("\n");
+}
+
+/* Called by shell.c's run() on every line, before command lookup.
+   Returns 1 if the line was consumed as a secret-phrase attempt
+   (whether it matched or not counts as "waiting" only once). */
+int ddf_try_secret(const char *input) {
+    if (!ddf_waiting_secret) return 0;
+    ddf_waiting_secret = 0;   /* one-shot: only the very next line counts */
+
+    char numbuf[12];
+    int_to_str(ddf_last_numerator, numbuf);
+
+    char expect[64] = {0};
+    strcpy(expect, "actually ");
+    strcat(expect, numbuf);
+    strcat(expect, " divided by 0 is ");
+    strcat(expect, ddf_last_numerator == 0 ? "indeterminate" : "undefined");
+
+    if (strcmp(input, expect) != 0) return 0;   /* not a match, let it fall through */
+
+    ddf_unlocked = 1;
+    kprint_color("\n  >> D/D/F mode unlocked.\n", LGREEN, BLACK);
+    kprint("  Type 'ddf' to enter the developer/debug/fun console.\n\n");
+    return 1;
+}
+
+/* Hidden console — deliberately absent from cmd_table, so it never
+   shows in 'help' or tab-completion and only exists once unlocked. */
+void ddf_command(const char *args) {
+    if (!ddf_unlocked) {
+        kprint_color("Unknown command: ", LRED, BLACK);
+        kprint("ddf");
+        kprint("  (type 'help')\n");
+        return;
+    }
+
+    if (!args || !*args) {
+        kprint_color("=== D/D/F console ===\n", LMAGENTA, BLACK);
+        kprint("  sysinfo  - dump developer system state\n");
+        kprint("  panic    - force a kernel panic sequence\n");
+        kprint("  lock     - relock the trapdoor\n");
+        return;
+    }
+
+    if (strcmp(args, "lock") == 0) {
+        ddf_unlocked = 0;
+        kprint_color("D/D/F mode relocked.\n", LMAGENTA, BLACK);
+        return;
+    }
+
+    if (strcmp(args, "sysinfo") == 0) {
+        kprint_color("  [D/D/F] ", LMAGENTA, BLACK);
+        kprint(OS_NAME " " OS_VERSION " -- developer view\n");
+        kprint("  Ticks since boot   : "); kprint_int((int)timer_ticks()); kprint("\n");
+        kprint("  Last alu(a/0) trap : a="); kprint_int(ddf_last_numerator); kprint("\n");
+        return;
+    }
+
+    if (strcmp(args, "panic") == 0) {
+        cmd_kernelpanic("");
+        return;
+    }
+
+    kprint_color("Unknown ddf subcommand. Try: sysinfo, panic, lock\n", LRED, BLACK);
 }
 
 
